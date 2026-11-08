@@ -1,0 +1,3 @@
+Bu klasör "model dâhil" paket içindir. Normal pakette boş kalır (yalnızca bu dosya).
+Model eklemek için:  python3 tool/bundle_model.py <model.gguf> --name "Görünen ad" --license "Apache-2.0"
+Betik modeli 64 MB'lık parçalara böler ve manifest.json yazar. Parçalar git'e eklenmez.
