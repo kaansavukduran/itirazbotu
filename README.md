@@ -57,7 +57,7 @@ native/
                              boş disk, boş bellek)
   CMakeLists.txt             llama.cpp'yi statik derleyip tek kütüphaneye bağlar
   apple/ItirazNative.podspec iOS/macOS için xcframework'ü gömer
-third_party/llama.cpp        git alt modülü, sabit sürüm: b11900 (74b104c9, 26.10.2026)
+third_party/llama.cpp        git alt modülü, sabit sürüm: a691b2345844ce1b430201fc5fd404ce062e05f2 (08.11.2026)
 tool/
   make_test_model.py         İnternetsiz, rastgele ağırlıklı test modeli üretir
   bundle_model.py            "Model dâhil" paket için modeli parçalara böler
@@ -74,7 +74,7 @@ tool/
   Esc) üretimi hemen keser. Model açılamazsa, uyumsuzsa ya da bellek yetmezse durum yazılır ve
   kurallı sonuç ekranda kalır.
 
-**Sabitlenen sürümler:** Flutter 3.47.9 (Dart 3.13.7) · llama.cpp b11900 · Inter yazı tipi
+**Sabitlenen sürümler:** Flutter 3.47.9 (Dart 3.13.7) · llama.cpp a691b234 · Inter yazı tipi
 (OFL-1.1, pakette). GPU/Metal kapalıdır: her platformda aynı CPU yolu (Apple'da Accelerate).
 
 ---
@@ -114,6 +114,7 @@ flutter run -d windows
 flutter build windows --release
 # Çıktı: build\windows\x64\runner\Release\
 #   itiraz_botu.exe, itiraz_native.dll, flutter_windows.dll, data\
+New-Item -ItemType Directory -Force dist
 Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath dist\itiraz-botu-windows-x64.zip
 ```
 
@@ -126,7 +127,7 @@ Redistributable (x64) kurulmalıdır; bunu da önceden indirip çevrimdışı ku
 ## Linux
 
 ```bash
-sudo apt install git clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
+sudo apt install git clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-dev libgles2
 git clone --recurse-submodules https://github.com/kaansavukduran/itirazbotu.git
 cd itirazbotu
 flutter pub get
@@ -134,6 +135,7 @@ flutter run -d linux
 
 # Kurulabilir çıktı
 flutter build linux --release
+mkdir -p dist
 tar -C build/linux/x64/release -czf dist/itiraz-botu-linux-x64.tar.gz \
     --transform 's/^bundle/itiraz-botu/' bundle
 # Hedefte: tar xzf itiraz-botu-linux-x64.tar.gz && ./itiraz-botu/itiraz_botu
@@ -182,7 +184,7 @@ flutter pub get
 flutter run -d <cihaz-kimliği>            # flutter devices ile listele
 
 # Kurulabilir çıktı (mağazasız, imza: debug anahtarı)
-flutter build apk --release --split-per-abi
+flutter build apk --release --target-platform android-arm64,android-x64 --split-per-abi
 # build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
 adb install build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
 ```
@@ -284,12 +286,14 @@ atlanır; `tool/test_native.sh` bunları kendisi ayarlar.
 
 ### Hangi model?
 
-- Biçim: **GGUF** (llama.cpp b11900 ile uyumlu). Uygulama dosyayı açmadan önce sihirli
+- Biçim: **GGUF** (llama.cpp a691b234 ile uyumlu). Uygulama dosyayı açmadan önce sihirli
   baytları, GGUF sürümünü (2–3), tensör ofsetlerini (yarım dosya) ve mimariyi denetler.
 - Boyut: telefon ve 8 GB RAM'li bilgisayarlar için 0,5–1,5 milyar parametre, **Q4_K_M**.
 - Öneri: **Qwen2.5-0.5B-Instruct** veya **Qwen2.5-1.5B-Instruct** (Apache-2.0, dağıtıma
-  izin verir, çok dilli). Türkçe kalitesini kendi cihazınızda deneyin; bu depo hazırlanırken
-  model indirme sunucularına erişim olmadığı için Türkçe yanıt kalitesi **denenmedi**.
+  izin verir, çok dilli). Her iki modelin Q4_K_M sürümü bu oturumda denendi. Yerel yükleme ve üretim
+  çalıştı; ancak istem tekrarı, görev sınırını aşma ve bozuk Türkçe görüldü. Bu yüzden
+  bu iki model **hazır Türkçe paket için önerilmiyor**. Ham örnekler ve ayrım için
+  [doğrulama raporuna](docs/DOGRULAMA.md) bakın.
 
 Modeli internetli bir makinede bir kez indirip (ör. Hugging Face'teki resmi GGUF deposundan)
 USB bellek, AirDrop ya da kabloyla hedef cihaza taşıyın. Uygulamanın kendisi hiçbir şey
@@ -310,14 +314,16 @@ indirmez.
 
 ```bash
 python3 tool/bundle_model.py qwen2.5-0.5b-instruct-q4_k_m.gguf \
-    --name "Qwen2.5 0.5B Instruct" --license "Apache-2.0"
+    --name "Denediğiniz model" --license "Apache-2.0" --license-file MODEL_LICENSE.txt
 flutter build <windows|linux|macos|apk|ipa> --release
 python3 tool/bundle_model.py --clean        # paketi yeniden modelsiz yapar
 ```
 
 Model 64 MB'lık parçalar hâlinde `assets/bundled_model/` içine konur (git'e eklenmez).
 Uygulama ilk kullanımda **Ayarlar → Paketteki modeli kullan** ile parçaları cihazda birleştirir
-(ağ yok) ve modeli yükler. Model lisansını paketle birlikte dağıtmayı unutmayın.
+(ağ yok) ve modeli yükler. `--license-file` ile verilen tam lisans metni pakete eklenir. Birleştirmeden sonra
+SHA-256 ve GGUF tensör boyutları denetlenir. Bu oturumda denenen Qwen modellerinin
+Türkçe kalite sınırları nedeniyle hazır çıktılar **modelsizdir**.
 
 ---
 
@@ -355,22 +361,20 @@ Her platformda şu dört kontrolü ayrı ayrı yapın. **Bir platformun derlenme
 
 ## Doğrulama durumu
 
-Bu depo hazırlanırken yalnızca bir Linux (x86_64) bulut konteyneri vardı. Windows makinesi,
-Mac, Android SDK (dl.google.com erişimi kapalıydı) ve iPhone yoktu; model sunucularına
-(Hugging Face) erişim de kapalıydı.
+Güncel ve adım adım kanıtlar: [9 Kasım 2026 doğrulama raporu](docs/DOGRULAMA.md).
+Derleme ile cihazdaki çevrimdışı çalıştırma ayrı tutulur. `.github/workflows/build.yml`
+Linux, Windows, Android, macOS ve imzasız iOS derleme yollarını PR'larda ve elle
+çalıştırılabilir hâle getirir; iş akışının varlığı başarılı derleme kanıtı değildir.
 
 | Platform | Derlendi | Cihazda çalıştırıldı | Çevrimdışı ilk açılış doğrulandı | Yerel model doğrulandı |
 |---|---|---|---|---|
-| Linux x64 | ✅ `flutter build linux --release` | ✅ Xvfb altında, gerçek uygulama | ✅ ağ ad alanı yalnızca `lo`, temiz HOME, `strace`: yalnızca `AF_UNIX` | ⚠️ Kısmen: rastgele ağırlıklı test modeli içe aktarıldı, yüklendi, arayüzde akışla belirteç üretti; paket modeli de çalıştı. Gerçek Türkçe model denenmedi |
-| Windows 11 | ❌ MSVC yok (köprünün Windows kodu yalnızca MinGW sözdizimi denetiminden geçti) | ❌ | ❌ | ❌ |
-| macOS | ❌ Xcode yok | ❌ | ❌ | ❌ |
-| Android | ❌ Android SDK/NDK indirilemedi | ❌ | ❌ | ❌ |
-| iPhone | ❌ macOS/Xcode yok | ❌ | ❌ | ❌ |
+| Linux x64 | Evet, release | Evet, Xvfb üzerinde masaüstü uygulaması | Evet, temiz veri dizini ve yalnızca `lo` içeren ağ alanı | Evet, gerçek Qwen GGUF; **Türkçe kalite sınırlı** |
+| Android ARM64 / x64 | Evet, APK | Hayır, cihaz/emülatör yok | Hayır | Hayır; NDK köprüsü derlendi, cihazda üretim denenmedi |
+| Windows 11 | Bu ortamda hayır, MSVC/Windows yok | Hayır | Hayır | Hayır |
+| macOS | Bu ortamda hayır, macOS/Xcode yok | Hayır | Hayır | Hayır |
+| iPhone | Bu ortamda hayır, macOS/Xcode ve imzalama yok | Hayır | Hayır | Hayır |
 
-Sıradaki komutlar: Windows'ta `flutter build windows --release`; macOS'ta
-`./tool/build_apple.sh && flutter build macos --release`; Android'de
-`flutter build apk --release --split-per-abi`; iPhone'da yukarıdaki iOS adımları. Ardından
-her platformda [Çevrimdışı doğrulama](#çevrimdışı-doğrulama) tablosunu uygulayın.
+Eksik araçlar ve her platformda sıradaki komut [raporda](docs/DOGRULAMA.md#diğer-platformlar).
 
 ---
 

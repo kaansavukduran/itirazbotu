@@ -51,24 +51,36 @@ class SettingsPage extends StatelessWidget {
                 SwitchListTile(
                   key: const Key('history-switch'),
                   title: const Text('Geçmişi tut'),
-                  subtitle: const Text('Varsayılan olarak kapalı. Açarsan kayıtlar yalnızca bu cihazda tutulur; kapatınca silinir.'),
+                  subtitle: const Text(
+                    'Varsayılan olarak kapalı. Açarsan kayıtlar yalnızca bu cihazda tutulur; kapatınca silinir.',
+                  ),
                   value: c.settings.historyEnabled,
                   onChanged: c.setHistoryEnabled,
                 ),
-                ListTile(
-                  title: Text('${c.history.entries.length} kayıt'),
-                  trailing: OutlinedButton.icon(
-                    key: const Key('clear-history'),
-                    onPressed: c.history.entries.isEmpty
-                        ? null
-                        : () async {
-                            await c.clearHistory();
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Geçmiş temizlendi.')));
-                            }
-                          },
-                    icon: const Icon(Icons.delete_sweep_outlined),
-                    label: const Text('Geçmişi temizle'),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 12,
+                    runSpacing: 8,
+                    children: [
+                      Text('${c.history.entries.length} kayıt'),
+                      OutlinedButton.icon(
+                        key: const Key('clear-history'),
+                        onPressed: c.history.entries.isEmpty
+                            ? null
+                            : () async {
+                                await c.clearHistory();
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context)
+                                      .showSnackBar(const SnackBar(content: Text('Geçmiş temizlendi.')));
+                                }
+                              },
+                        icon: const Icon(Icons.delete_sweep_outlined),
+                        label: const Text('Geçmişi temizle'),
+                      ),
+                    ],
                   ),
                 ),
                 const Divider(),
@@ -90,8 +102,9 @@ class SettingsPage extends StatelessWidget {
                 ListTile(
                   leading: const Icon(Icons.info_outline),
                   title: const Text('Sürümler'),
-                  subtitle: const Text('Uygulama 1.0.0 · Kural motoru $ruleEngineVersion · llama.cpp b11900'),
-                  onTap: () => showLicensePage(context: context, applicationName: 'İtiraz Botu', applicationVersion: '1.0.0'),
+                  subtitle: const Text('Uygulama 1.0.0 · Kural motoru $ruleEngineVersion · llama.cpp a691b234'),
+                  onTap: () =>
+                      showLicensePage(context: context, applicationName: 'İtiraz Botu', applicationVersion: '1.0.0'),
                 ),
               ],
             ),
@@ -102,9 +115,9 @@ class SettingsPage extends StatelessWidget {
   }
 
   Widget _header(BuildContext context, String s) => Padding(
-        padding: const EdgeInsets.only(top: 12, bottom: 4),
-        child: Semantics(header: true, child: Text(s, style: Theme.of(context).textTheme.titleMedium)),
-      );
+    padding: const EdgeInsets.only(top: 12, bottom: 4),
+    child: Semantics(header: true, child: Text(s, style: Theme.of(context).textTheme.titleMedium)),
+  );
 }
 
 class ModelSection extends StatelessWidget {
@@ -164,90 +177,100 @@ class ModelSection extends StatelessWidget {
     final loading = svc.state == ModelState.loading;
     final busy = loading || c.isImporting || svc.state == ModelState.generating;
     final b = c.bundled;
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Semantics(
-        liveRegion: true,
-        child: Card(
-          color: t.colorScheme.surfaceContainerHighest,
-          child: ListTile(
-            leading: Icon(svc.isLoaded ? Icons.check_circle_outline : Icons.radio_button_unchecked,
-                color: svc.isLoaded ? Colors.green.shade700 : null),
-            title: Text(
-              switch (svc.state) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          liveRegion: true,
+          child: Card(
+            color: t.colorScheme.surfaceContainerHighest,
+            child: ListTile(
+              leading: Icon(
+                svc.isLoaded ? Icons.check_circle_outline : Icons.radio_button_unchecked,
+                color: svc.isLoaded ? Colors.green.shade700 : null,
+              ),
+              title: Text(switch (svc.state) {
                 ModelState.ready => 'Durum: Hazır · ${svc.loadedName}',
                 ModelState.generating => 'Durum: Yanıt üretiyor · ${svc.loadedName}',
                 ModelState.loading => 'Durum: Yükleniyor…',
                 ModelState.error => 'Durum: Hata',
                 _ => 'Durum: Model yüklü değil',
-              },
-              key: const Key('model-status'),
+              }, key: const Key('model-status')),
+              subtitle: Text(c.deviceSummary()),
             ),
-            subtitle: Text(c.deviceSummary()),
           ),
         ),
-      ),
-      if (loading) ...[
-        LinearProgressIndicator(value: c.modelLoadProgress),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton(onPressed: c.cancelModelLoad, child: const Text('Yüklemeyi iptal et')),
-        ),
-      ],
-      if (c.isImporting) ...[
+        if (loading) ...[
+          LinearProgressIndicator(value: c.modelLoadProgress),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(onPressed: c.cancelModelLoad, child: const Text('Yüklemeyi iptal et')),
+          ),
+        ],
+        if (c.isImporting) ...[
+          const SizedBox(height: 8),
+          Text('${c.importLabel ?? ''} · %${((c.importProgress ?? 0) * 100).toStringAsFixed(0)}'),
+          const SizedBox(height: 4),
+          LinearProgressIndicator(value: c.importProgress, semanticsLabel: 'İçe aktarma ilerlemesi'),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(key: const Key('cancel-import'), onPressed: c.cancelImport, child: const Text('İptal')),
+          ),
+        ],
+        if (c.modelMessage != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(c.modelMessage!, key: const Key('model-message'), style: t.textTheme.bodyMedium),
+          ),
         const SizedBox(height: 8),
-        Text('${c.importLabel ?? ''} · %${((c.importProgress ?? 0) * 100).toStringAsFixed(0)}'),
-        const SizedBox(height: 4),
-        LinearProgressIndicator(value: c.importProgress, semanticsLabel: 'İçe aktarma ilerlemesi'),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton(key: const Key('cancel-import'), onPressed: c.cancelImport, child: const Text('İptal')),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            FilledButton.icon(
+              key: const Key('import-model'),
+              onPressed: busy ? null : () => _pick(context),
+              icon: const Icon(Icons.file_open_outlined),
+              label: const Text('Dosyadan model ekle (.gguf)'),
+            ),
+            if (desktop)
+              TextButton(
+                key: const Key('enter-path'),
+                onPressed: busy ? null : () => _enterPath(context),
+                child: const Text('Yolu elle gir'),
+              ),
+            if (b != null && c.store.preparedBundled(b) == null)
+              OutlinedButton.icon(
+                onPressed: busy
+                    ? null
+                    : () async {
+                        final m = await c.prepareBundledModel();
+                        if (m != null) await c.loadModel(m);
+                      },
+                icon: const Icon(Icons.inventory_2_outlined),
+                label: Text('Paketteki modeli kullan (${b.displayName ?? b.fileName})'),
+              ),
+            if (svc.isLoaded)
+              OutlinedButton.icon(
+                onPressed: busy ? null : c.unloadModel,
+                icon: const Icon(Icons.eject),
+                label: const Text('Bellekten çıkar'),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (c.storedModels.isEmpty)
+          Text('Cihazda kayıtlı model yok.', style: t.textTheme.bodyMedium)
+        else
+          for (final m in c.storedModels) _modelTile(context, m, busy),
+        const SizedBox(height: 8),
+        Text(
+          'İpucu: 4–8 GB bellekli cihazlar için 0,5–1,5 milyar parametreli, Q4_K_M nicemlemeli '
+          'Türkçe destekli bir model (ör. Qwen2.5 Instruct, Apache-2.0) uygundur.',
+          style: t.textTheme.bodySmall,
         ),
       ],
-      if (c.modelMessage != null)
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Text(c.modelMessage!, key: const Key('model-message'), style: t.textTheme.bodyMedium),
-        ),
-      const SizedBox(height: 8),
-      Wrap(spacing: 8, runSpacing: 8, children: [
-        FilledButton.icon(
-          key: const Key('import-model'),
-          onPressed: busy ? null : () => _pick(context),
-          icon: const Icon(Icons.file_open_outlined),
-          label: const Text('Dosyadan model ekle (.gguf)'),
-        ),
-        if (desktop)
-          TextButton(
-            key: const Key('enter-path'),
-            onPressed: busy ? null : () => _enterPath(context),
-            child: const Text('Yolu elle gir'),
-          ),
-        if (b != null && c.store.preparedBundled(b) == null)
-          OutlinedButton.icon(
-            onPressed: busy
-                ? null
-                : () async {
-                    final m = await c.prepareBundledModel();
-                    if (m != null) await c.loadModel(m);
-                  },
-            icon: const Icon(Icons.inventory_2_outlined),
-            label: Text('Paketteki modeli kullan (${b.displayName ?? b.fileName})'),
-          ),
-        if (svc.isLoaded)
-          OutlinedButton.icon(onPressed: busy ? null : c.unloadModel, icon: const Icon(Icons.eject), label: const Text('Bellekten çıkar')),
-      ]),
-      const SizedBox(height: 12),
-      if (c.storedModels.isEmpty)
-        Text('Cihazda kayıtlı model yok.', style: t.textTheme.bodyMedium)
-      else
-        for (final m in c.storedModels) _modelTile(context, m, busy),
-      const SizedBox(height: 8),
-      Text(
-        'İpucu: 4–8 GB bellekli cihazlar için 0,5–1,5 milyar parametreli, Q4_K_M nicemlemeli '
-        'Türkçe destekli bir model (ör. Qwen2.5 Instruct, Apache-2.0) uygundur.',
-        style: t.textTheme.bodySmall,
-      ),
-    ]);
+    );
   }
 
   Widget _modelTile(BuildContext context, StoredModel m, bool busy) {
@@ -257,30 +280,32 @@ class ModelSection extends StatelessWidget {
         leading: Icon(m.bundled ? Icons.inventory_2_outlined : Icons.description_outlined),
         title: Text(m.fileName),
         subtitle: Text('${formatBytes(m.size)}${m.bundled ? ' · paketle geldi' : ''}${loaded ? ' · yüklü' : ''}'),
-        trailing: Wrap(spacing: 4, children: [
-          if (!loaded)
-            TextButton(onPressed: busy ? null : () => c.loadModel(m), child: const Text('Yükle')),
-          IconButton(
-            tooltip: '${m.fileName} dosyasını sil',
-            icon: const Icon(Icons.delete_outline),
-            onPressed: busy
-                ? null
-                : () async {
-                    final ok = await showDialog<bool>(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: const Text('Model silinsin mi?'),
-                        content: Text('${m.fileName} (${formatBytes(m.size)}) cihazdan silinecek.'),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Vazgeç')),
-                          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Sil')),
-                        ],
-                      ),
-                    );
-                    if (ok == true) await c.deleteModel(m);
-                  },
-          ),
-        ]),
+        trailing: Wrap(
+          spacing: 4,
+          children: [
+            if (!loaded) TextButton(onPressed: busy ? null : () => c.loadModel(m), child: const Text('Yükle')),
+            IconButton(
+              tooltip: '${m.fileName} dosyasını sil',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: busy
+                  ? null
+                  : () async {
+                      final ok = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Model silinsin mi?'),
+                          content: Text('${m.fileName} (${formatBytes(m.size)}) cihazdan silinecek.'),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Vazgeç')),
+                            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Sil')),
+                          ],
+                        ),
+                      );
+                      if (ok == true) await c.deleteModel(m);
+                    },
+            ),
+          ],
+        ),
       ),
     );
   }

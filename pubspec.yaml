@@ -38,6 +38,7 @@ dependencies:
   path_provider: ^2.1.6
   file_picker: ^13.3.2
   ffi: ^2.2.0
+  crypto: ^3.0.8
 
 dev_dependencies:
   flutter_test:
@@ -64,6 +65,7 @@ flutter:
   # Tüm kaynaklar pakette: çalışma anında hiçbir şey indirilmez.
   assets:
     - assets/fonts/INTER_LICENSE.txt
+    - assets/licenses/LLAMA_LICENSE.txt
     - assets/bundled_model/
 
   fonts:

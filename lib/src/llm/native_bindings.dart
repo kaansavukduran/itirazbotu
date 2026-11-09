@@ -10,7 +10,7 @@ import 'dart:io';
 import 'package:ffi/ffi.dart';
 
 /// Köprünün beklenen ABI sürümü (C tarafındaki kAbiVersion ile aynı olmalı).
-const int expectedAbiVersion = 1;
+const int expectedAbiVersion = 2;
 
 /// `ib_next` dönüş değeri: üretim bitti.
 const int ibDone = -100;
@@ -19,9 +19,23 @@ const int ibDone = -100;
 const int ibCancelled = -1;
 
 typedef IbLoadC = Pointer<Void> Function(
-  Pointer<Utf8>, Int32, Int32, Pointer<Float>, Pointer<Int32>, Pointer<Utf8>, Int32);
+  Pointer<Utf8>,
+  Int32,
+  Int32,
+  Pointer<Float>,
+  Pointer<Int32>,
+  Pointer<Utf8>,
+  Int32,
+);
 typedef IbLoadDart = Pointer<Void> Function(
-  Pointer<Utf8>, int, int, Pointer<Float>, Pointer<Int32>, Pointer<Utf8>, int);
+  Pointer<Utf8>,
+  int,
+  int,
+  Pointer<Float>,
+  Pointer<Int32>,
+  Pointer<Utf8>,
+  int,
+);
 typedef IbStartC = Int32 Function(Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>, Int32, Float, Uint32);
 typedef IbStartDart = int Function(Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>, int, double, int);
 typedef IbNextC = Int32 Function(Pointer<Void>, Pointer<Uint8>, Int32);
@@ -34,6 +48,9 @@ class NativeBridge {
       load = lib.lookupFunction<IbLoadC, IbLoadDart>('ib_load'),
       free = lib.lookupFunction<Void Function(Pointer<Void>), void Function(Pointer<Void>)>('ib_free'),
       cancel = lib.lookupFunction<Void Function(Pointer<Void>), void Function(Pointer<Void>)>('ib_cancel'),
+      prepareGeneration = lib.lookupFunction<Void Function(Pointer<Void>), void Function(Pointer<Void>)>(
+        'ib_prepare_generation',
+      ),
       modelSize = lib.lookupFunction<Int64 Function(Pointer<Void>), int Function(Pointer<Void>)>('ib_model_size'),
       lastError = lib.lookupFunction<Pointer<Utf8> Function(Pointer<Void>), Pointer<Utf8> Function(Pointer<Void>)>(
         'ib_last_error',
@@ -47,6 +64,7 @@ class NativeBridge {
   final IbLoadDart load;
   final void Function(Pointer<Void>) free;
   final void Function(Pointer<Void>) cancel;
+  final void Function(Pointer<Void>) prepareGeneration;
   final int Function(Pointer<Void>) modelSize;
   final Pointer<Utf8> Function(Pointer<Void>) lastError;
   final IbStartDart start;
@@ -82,7 +100,9 @@ class NativeBridge {
 
   static DynamicLibrary _openLibrary() {
     final override = overridePath;
-    if (override != null && override.isNotEmpty) return DynamicLibrary.open(override);
+    if (override != null && override.isNotEmpty) {
+      return DynamicLibrary.open(override);
+    }
     if (Platform.isIOS || Platform.isMacOS) {
       // CocoaPods ile gömülen çerçeve (bkz. native/apple/ItirazNative.podspec).
       try {

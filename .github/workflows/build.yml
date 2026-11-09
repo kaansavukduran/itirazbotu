@@ -1,0 +1,89 @@
+name: Beş platform derlemesi
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Derleme (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Linux
+            os: ubuntu-24.04
+          - platform: Windows
+            os: windows-2022
+          - platform: Android
+            os: ubuntu-24.04
+          - platform: macOS ve iOS
+            os: macos-15
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      # SDK doğrudan sabit etiketten alınır; hareketli stable dalı kullanılmaz.
+      - name: Flutter 3.47.9
+        shell: bash
+        run: |
+          git clone --depth 1 --branch 3.47.9 https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter-sdk"
+          echo "$RUNNER_TEMP/flutter-sdk/bin" >> "$GITHUB_PATH"
+      - name: Linux araçları
+        if: matrix.platform == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build libgtk-3-dev liblzma-dev
+          python3 -m venv "$RUNNER_TEMP/native-tests"
+          "$RUNNER_TEMP/native-tests/bin/pip" install numpy
+          echo "$RUNNER_TEMP/native-tests/bin" >> "$GITHUB_PATH"
+      - uses: actions/setup-java@v4
+        if: matrix.platform == 'Android'
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Bağımlılıklar ve statik denetim
+        run: |
+          flutter config --no-analytics
+          flutter pub get --enforce-lockfile
+          flutter analyze
+          flutter test
+      - name: Linux paketi ve gerçek yerel köprü testi
+        if: matrix.platform == 'Linux'
+        run: |
+          ./tool/test_native.sh
+          flutter build linux --release
+          mkdir -p dist
+          tar -C build/linux/x64/release -czf dist/itiraz-botu-linux-x64.tar.gz bundle
+      - name: Windows paketi
+        if: matrix.platform == 'Windows'
+        run: |
+          flutter build windows --release
+          New-Item -ItemType Directory -Force dist
+          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath dist/itiraz-botu-windows-x64.zip
+      - name: Android paketleri
+        if: matrix.platform == 'Android'
+        run: |
+          flutter build apk --release --target-platform android-arm64,android-x64 --split-per-abi
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/*release.apk dist/
+      - name: Apple yerel köprüsü ve imzasız paketler
+        if: matrix.platform == 'macOS ve iOS'
+        run: |
+          ./tool/build_apple.sh
+          flutter build macos --release
+          flutter build ios --release --no-codesign
+          mkdir -p dist
+          ditto -c -k --keepParent build/macos/Build/Products/Release/itiraz_botu.app dist/itiraz-botu-macos.zip
+          ditto -c -k --keepParent build/ios/iphoneos/Runner.app dist/itiraz-botu-ios-imzasiz.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: itiraz-botu-${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14

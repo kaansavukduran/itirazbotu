@@ -36,10 +36,13 @@ void main() {
   }, skip: skip ?? (bad == null ? 'ITIRAZ_BAD_MODEL yok' : null));
 
   test('GGUF olmayan dosya Türkçe hata verir', () async {
-    final f = File('${Directory.systemTemp.path}/sahte_model.gguf')..writeAsStringSync('merhaba dünya, ben model değilim' * 4);
+    final f = File('${Directory.systemTemp.path}/sahte_model.gguf')
+      ..writeAsStringSync('merhaba dünya, ben model değilim' * 4);
     try {
-      expect(() => inspectGgufSync(f.path),
-          throwsA(predicate((e) => e is GgufException && e.message.contains('GGUF model dosyası değil'))));
+      expect(
+        () => inspectGgufSync(f.path),
+        throwsA(predicate((e) => e is GgufException && e.message.contains('GGUF model dosyası değil'))),
+      );
       await expectLater(svc.load(f.path), throwsA(isA<ModelLoadException>()));
       expect(svc.state, ModelState.error);
     } finally {
@@ -47,55 +50,78 @@ void main() {
     }
   }, skip: skip);
 
-  test('model yüklenir ve gerçek belirteç üretir', () async {
-    expect(svc.isSupported, isTrue, reason: svc.unsupportedReason);
-    final progress = <double>[];
-    await svc.load(model!, onProgress: progress.add);
-    expect(svc.state, ModelState.ready);
-    expect(progress.last, 1.0);
+  test(
+    'model yüklenir ve gerçek belirteç üretir',
+    () async {
+      expect(svc.isSupported, isTrue, reason: svc.unsupportedReason);
+      final progress = <double>[];
+      await svc.load(model!, onProgress: progress.add);
+      expect(svc.state, ModelState.ready);
+      expect(progress.last, 1.0);
 
-    final events = await svc.generate(system: 'Kısa yanıt ver.', user: 'Özür mesajını kendim mi yazmalıyım?', maxTokens: 24).toList();
-    final fin = events.last as GenerationFinished;
-    expect(fin.error, isNull);
-    expect(fin.cancelled, isFalse);
-    expect(fin.tokenCount, greaterThan(0));
-    final text = events.whereType<GenerationChunk>().map((c) => c.text).join();
-    // Rastgele ağırlıklı test modeli anlamsız metin üretir; önemli olan gerçekten üretmesi.
-    expect(text, isNotEmpty);
-    expect(svc.state, ModelState.ready);
-  }, skip: skip, timeout: const Timeout(Duration(minutes: 2)));
+      final events = await svc
+          .generate(system: 'Kısa yanıt ver.', user: 'Özür mesajını kendim mi yazmalıyım?', maxTokens: 24)
+          .toList();
+      final fin = events.last as GenerationFinished;
+      expect(fin.error, isNull);
+      expect(fin.cancelled, isFalse);
+      expect(fin.tokenCount, greaterThan(0));
+      final text = events.whereType<GenerationChunk>().map((c) => c.text).join();
+      // Rastgele ağırlıklı test modeli anlamsız metin üretir; önemli olan gerçekten üretmesi.
+      expect(text, isNotEmpty);
+      expect(svc.state, ModelState.ready);
+    },
+    skip: skip,
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
 
-  test('üretim kullanıcı tarafından durdurulur', () async {
-    await svc.load(model!);
-    final events = <GenerationEvent>[];
-    final done = Completer<void>();
-    svc.generate(system: '', user: 'Uzun bir hikâye anlat', maxTokens: 200, temperature: 0.8).listen((e) {
-      events.add(e);
-      if (e is GenerationChunk && events.length == 2) svc.stop();
-      if (e is GenerationFinished) done.complete();
-    });
-    await done.future;
-    final fin = events.last as GenerationFinished;
-    expect(fin.cancelled, isTrue);
-    expect(fin.tokenCount, lessThan(200));
-    expect(svc.state, ModelState.ready, reason: 'iptalden sonra model kullanılabilir kalmalı');
-    // Ardından yeniden üretilebilir.
-    final again = await svc.generate(system: '', user: 'Tekrar', maxTokens: 4).toList();
-    expect((again.last as GenerationFinished).cancelled, isFalse);
-  }, skip: skip, timeout: const Timeout(Duration(minutes: 2)));
+  test(
+    'üretim kullanıcı tarafından durdurulur',
+    () async {
+      await svc.load(model!);
+      final events = <GenerationEvent>[];
+      final done = Completer<void>();
+      svc.generate(system: '', user: 'Uzun bir hikâye anlat', maxTokens: 200, temperature: 0.8).listen((e) {
+        events.add(e);
+        if (e is GenerationChunk && events.length == 2) svc.stop();
+        if (e is GenerationFinished) done.complete();
+      });
+      await done.future;
+      final fin = events.last as GenerationFinished;
+      expect(fin.cancelled, isTrue);
+      expect(fin.tokenCount, lessThan(200));
+      expect(svc.state, ModelState.ready, reason: 'iptalden sonra model kullanılabilir kalmalı');
+      // Ardından yeniden üretilebilir.
+      final again = await svc.generate(system: '', user: 'Tekrar', maxTokens: 4).toList();
+      expect((again.last as GenerationFinished).cancelled, isFalse);
+    },
+    skip: skip,
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
 
   test('model yüklemesi iptal edilebilir', () async {
     final f = svc.load(model!);
     svc.cancelLoad();
-    try {
-      await f;
-      // Küçük model iptal bayrağı okunmadan bitmiş olabilir; bu da geçerli bir sonuç.
-      expect(svc.state, ModelState.ready);
-    } on ModelLoadException catch (e) {
-      expect(e.cancelled, isTrue);
-      expect(e.message, contains('iptal'));
-      expect(svc.state, ModelState.empty);
-    }
+    await expectLater(f, throwsA(predicate((e) => e is ModelLoadException && e.cancelled)));
+    expect(svc.state, ModelState.empty);
+  }, skip: skip);
+
+  test('üretim başladığı turda gelen durdur isteği kaybolmaz', () async {
+    await svc.load(model!);
+    final events = svc.generate(system: '', user: 'Merhaba', maxTokens: 100).toList();
+    svc.stop();
+    final finished = (await events).last as GenerationFinished;
+    expect(finished.cancelled, isTrue);
+    expect(svc.state, ModelState.ready);
+    final again = await svc.generate(system: '', user: 'Tekrar', maxTokens: 2).toList();
+    expect((again.last as GenerationFinished).error, isNull);
+  }, skip: skip);
+
+  test('başlık denetlenirken ikinci yükleme reddedilir', () async {
+    final first = svc.load(model!);
+    await expectLater(svc.load(model), throwsA(isA<ModelLoadException>()));
+    svc.cancelLoad();
+    await expectLater(first, throwsA(predicate((e) => e is ModelLoadException && e.cancelled)));
   }, skip: skip);
 
   test('başlığı geçerli ama llama.cpp\'nin açamadığı model kurallı sonucu bozmaz', () async {
@@ -116,8 +142,9 @@ void main() {
       final info = inspectGgufSync(f.path);
       expect(info.warnings.join(), contains('denenmedi'));
       await expectLater(
-          svc.load(f.path),
-          throwsA(predicate((e) => e is ModelLoadException && e.message.contains('açılamadı'))));
+        svc.load(f.path),
+        throwsA(predicate((e) => e is ModelLoadException && e.message.contains('açılamadı'))),
+      );
       expect(svc.state, ModelState.error);
       // Ardından geçerli model yine yüklenebilir.
       await svc.load(model);

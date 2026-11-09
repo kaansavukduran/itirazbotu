@@ -1,4 +1,4 @@
-# İtiraz Botu yerel model köprüsü (llama.cpp b11900, yalnızca CPU + Accelerate).
+# İtiraz Botu yerel model köprüsü (llama.cpp a691b234, yalnızca CPU + Accelerate).
 # Önce macOS'ta oluşturun:  ./tool/build_apple.sh   → native/apple/itiraz_native.xcframework
 Pod::Spec.new do |s|
   s.name                  = 'ItirazNative'

@@ -138,6 +138,20 @@ void main() {
     expect(Theme.of(tester.element(find.text('Değerlendir'))).brightness, Brightness.dark);
   });
 
+  testWidgets('dar telefonda büyük yazıyla karar ve ayarlar taşmaz', (tester) async {
+    await pumpApp(tester);
+    tester.view.physicalSize = const Size(320, 844);
+    await tester.runAsync(() => c.settings.update(large: true));
+    for (final task in ['Arkadaşıma özür mesajı yaz.', 'Bu paragrafı sadeleştir.', 'Şu işi hallet']) {
+      c.evaluate(task);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    }
+    await tester.tap(find.byTooltip('Ayarlar (Ctrl+,)'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('dokunma alanları en az 48 piksel', (tester) async {
     await pumpApp(tester);
     await expectLater(tester, meetsGuideline(androidTapTargetGuideline));

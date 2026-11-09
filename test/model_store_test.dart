@@ -79,9 +79,13 @@ void main() {
     final token = CancelToken();
     final f = src('b.gguf', fakeGguf(dataBytes: 8 * 1024 * 1024));
     await expectLater(
-      s.importFile(f.path, cancel: token, onProgress: (d, t) {
-        if (d > 0) token.cancel();
-      }),
+      s.importFile(
+        f.path,
+        cancel: token,
+        onProgress: (d, t) {
+          if (d > 0) token.cancel();
+        },
+      ),
       throwsA(isA<ImportCancelled>()),
     );
     expect(Directory('${tmp.path}/models').listSync(), isEmpty);
@@ -98,23 +102,35 @@ void main() {
   test('GGUF olmayan dosya içe aktarılmaz', () async {
     final s = store();
     final f = File('${tmp.path}/resim.gguf')..writeAsBytesSync(List.filled(200, 7));
-    await expectLater(s.importFile(f.path),
-        throwsA(predicate((e) => e is ImportFailure && e.message.contains('GGUF model dosyası değil'))));
+    await expectLater(
+      s.importFile(f.path),
+      throwsA(predicate((e) => e is ImportFailure && e.message.contains('GGUF model dosyası değil'))),
+    );
   });
 
   test('kesik dosya içe aktarılmaz', () async {
     final data = fakeGguf(dataBytes: 4096);
     final f = src('kesik.gguf', Uint8List.sublistView(data, 0, data.length - 4096));
-    await expectLater(store().importFile(f.path),
-        throwsA(predicate((e) => e is ImportFailure && e.message.contains('yarım'))));
+    await expectLater(
+      store().importFile(f.path),
+      throwsA(predicate((e) => e is ImportFailure && e.message.contains('yarım'))),
+    );
+  });
+
+  test('son tensörün tek baytı eksik olsa da içe aktarılmaz', () async {
+    final data = fakeGguf();
+    final f = src('son-bayt-eksik.gguf', Uint8List.sublistView(data, 0, data.length - 1));
+    await expectLater(store().importFile(f.path), throwsA(isA<ImportFailure>()));
   });
 
   test('desteklenmeyen sürüm ve bilinmeyen mimari', () {
     final data = fakeGguf(arch: 'gizemli');
     expect(inspectGgufSync(src('g.gguf', data).path).warnings.single, contains('denenmedi'));
     final v9 = Uint8List.fromList(data)..[4] = 9;
-    expect(() => inspectGgufSync(src('v9.gguf', v9).path),
-        throwsA(predicate((e) => e is GgufException && e.message.contains('sürüm 9'))));
+    expect(
+      () => inspectGgufSync(src('v9.gguf', v9).path),
+      throwsA(predicate((e) => e is GgufException && e.message.contains('sürüm 9'))),
+    );
   });
 
   test('paketteki model parçalardan hazırlanır', () async {
@@ -124,7 +140,12 @@ void main() {
       'assets/bundled_model/p0': ByteData.sublistView(Uint8List.sublistView(data, 0, half)),
       'assets/bundled_model/p1': ByteData.sublistView(Uint8List.sublistView(data, half)),
     };
-    final manifest = BundledModelManifest(fileName: 'mini.gguf', size: data.length, parts: ['p0', 'p1'], displayName: 'Mini');
+    final manifest = BundledModelManifest(
+      fileName: 'mini.gguf',
+      size: data.length,
+      parts: ['p0', 'p1'],
+      displayName: 'Mini',
+    );
     final s = store();
     expect(s.preparedBundled(manifest), isNull);
     final m = await s.prepareBundled(manifest, (k) async => assets[k]!);
@@ -135,6 +156,41 @@ void main() {
 
   test('manifest yoksa paket modelsiz sayılır', () async {
     expect(await ModelStore.readManifest((k) async => throw Exception('yok')), isNull);
+  });
+
+  test('son paket parçasından sonra iptal dosyayı yayımlamaz', () async {
+    final data = fakeGguf();
+    final s = store();
+    final token = CancelToken();
+    final manifest = BundledModelManifest(fileName: 'mini.gguf', size: data.length, parts: ['p0']);
+    await expectLater(
+      s.prepareBundled(
+        manifest,
+        (_) async => ByteData.sublistView(data),
+        cancel: token,
+        onProgress: (_, _) => token.cancel(),
+      ),
+      throwsA(isA<ImportCancelled>()),
+    );
+    expect(s.dir.listSync(), isEmpty);
+  });
+
+  test('boyutu doğru ama bozuk paket modeli reddedilir', () async {
+    final s = store();
+    final manifest = BundledModelManifest(fileName: 'bozuk.gguf', size: 256, parts: ['p0']);
+    await expectLater(s.prepareBundled(manifest, (_) async => ByteData(256)), throwsA(isA<ImportFailure>()));
+    expect(s.dir.listSync(), isEmpty);
+  });
+
+  test('paket modelinin SHA-256 özeti uyuşmazsa yarım dosya silinir', () async {
+    final data = fakeGguf();
+    final s = store();
+    final manifest = BundledModelManifest(fileName: 'mini.gguf', size: data.length, parts: ['p0'], sha256Hex: '0' * 64);
+    await expectLater(
+      s.prepareBundled(manifest, (_) async => ByteData.sublistView(data)),
+      throwsA(predicate((e) => e is ImportFailure && e.message.contains('bütünlük'))),
+    );
+    expect(s.dir.listSync(), isEmpty);
   });
 
   test('bayt biçimlendirme Türkçe ondalık kullanır', () {

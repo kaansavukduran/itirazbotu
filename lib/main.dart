@@ -14,6 +14,10 @@ Future<void> main() async {
     final text = await rootBundle.loadString('assets/fonts/INTER_LICENSE.txt');
     yield LicenseEntryWithLineBreaks(['Inter yazı tipi'], text);
   });
+  LicenseRegistry.addLicense(() async* {
+    final text = await rootBundle.loadString('assets/licenses/LLAMA_LICENSE.txt');
+    yield LicenseEntryWithLineBreaks(['llama.cpp ve ggml'], text);
+  });
 
   final controller = await createController(await getApplicationSupportDirectory());
   runApp(ItirazApp(controller: controller));

@@ -12,6 +12,7 @@ Kullanım:
 import argparse
 import hashlib
 import json
+import shutil
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -21,7 +22,7 @@ PART = 64 * 1024 * 1024
 
 def clean():
     for f in DEST.iterdir():
-        if f.name.startswith("part_") or f.name == "manifest.json":
+        if f.name.startswith("part_") or f.name in {"manifest.json", "MODEL_LICENSE.txt"}:
             f.unlink()
 
 
@@ -30,17 +31,25 @@ def main():
     ap.add_argument("model", nargs="?")
     ap.add_argument("--name")
     ap.add_argument("--license")
+    ap.add_argument("--license-file", help="Dağıtılacak modelin tam lisans metni")
     ap.add_argument("--clean", action="store_true")
     a = ap.parse_args()
     DEST.mkdir(parents=True, exist_ok=True)
-    clean()
-    if a.clean or not a.model:
+    if a.clean:
+        clean()
         print("Paket modelsiz.")
         return
+    if not a.model:
+        ap.error("Bir GGUF dosyası ya da --clean belirtin.")
     src = Path(a.model)
     with src.open("rb") as f:
         if f.read(4) != b"GGUF":
             raise SystemExit("Hata: bu bir GGUF dosyası değil.")
+    if a.license_file and not Path(a.license_file).is_file():
+        raise SystemExit("Hata: lisans dosyası bulunamadı.")
+    clean()
+    if a.license_file:
+        shutil.copyfile(a.license_file, DEST / "MODEL_LICENSE.txt")
     parts, sha = [], hashlib.sha256()
     with src.open("rb") as f:
         i = 0

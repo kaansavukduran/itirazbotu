@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -39,7 +40,7 @@
 
 namespace {
 
-constexpr int32_t kAbiVersion = 1;
+constexpr int32_t kAbiVersion = 2;
 
 struct Session {
     llama_model *   model   = nullptr;
@@ -73,14 +74,13 @@ void log_cb(ggml_log_level level, const char * text, void *) {
 #endif
 }
 
-std::atomic<bool> g_backend_ready{false};
+std::once_flag g_backend_ready;
 
 void ensure_backend() {
-    bool expected = false;
-    if (g_backend_ready.compare_exchange_strong(expected, true)) {
+    std::call_once(g_backend_ready, [] {
         llama_log_set(log_cb, nullptr);
         llama_backend_init();
-    }
+    });
 }
 
 // Modelin kendi sohbet şablonunu uygular; yoksa sade bir biçime düşer.
@@ -181,6 +181,11 @@ IB_EXPORT void ib_cancel(void * h) {
     if (s) s->cancel.store(1, std::memory_order_relaxed);
 }
 
+IB_EXPORT void ib_prepare_generation(void * h) {
+    auto * s = static_cast<Session *>(h);
+    if (s) s->cancel.store(0, std::memory_order_relaxed);
+}
+
 IB_EXPORT int64_t ib_model_size(void * h) {
     auto * s = static_cast<Session *>(h);
     return s ? (int64_t) llama_model_size(s->model) : 0;
@@ -196,7 +201,6 @@ IB_EXPORT int32_t ib_start(void * h, const char * system, const char * user, int
                            float temperature, uint32_t seed) {
     auto * s = static_cast<Session *>(h);
     if (!s) return -1;
-    s->cancel.store(0);
     s->has_pending = false;
     s->n_past = 0;
     llama_memory_clear(llama_get_memory(s->ctx), true);
