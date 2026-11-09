@@ -9,6 +9,7 @@ void main() {
   test('istem tekrarı başarılı ayrıntı olarak işaretlenmez', () {
     expect(isPromptEcho('Görev: "Arkadaşıma özür mesajı yaz."'), isTrue);
     expect(isPromptEcho('Kurallı değerlendirme:\nKarar: Kendin yap'), isTrue);
+    expect(isPromptEcho('Arkadaşıma özür mesajı yaz. Karar: Kendin yap. Gerekçe: Kişisel ifade.'), isTrue);
     expect(isPromptEcho('Neye üzüldüğünü bir cümleyle yaz; sesin duyulsun.'), isFalse);
   });
 }

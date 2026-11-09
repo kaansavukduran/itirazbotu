@@ -28,4 +28,7 @@ String cleanModelOutput(String s) {
 
 /// Küçük modeller bazen açıklama üretmek yerine girdiyi kopyalar. Bunu başarılı
 /// bir ayrıntı gibi sunmayalım; kurallı kart her durumda kullanılabilir kalır.
-bool isPromptEcho(String text) => text.trimLeft().startsWith('Görev:') || text.contains('Kurallı değerlendirme:');
+bool isPromptEcho(String text) =>
+    text.trimLeft().startsWith('Görev:') ||
+    text.contains('Kurallı değerlendirme:') ||
+    (text.contains('Karar:') && text.contains('Gerekçe:'));

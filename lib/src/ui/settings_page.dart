@@ -266,7 +266,8 @@ class ModelSection extends StatelessWidget {
         const SizedBox(height: 8),
         Text(
           'İpucu: 4–8 GB bellekli cihazlar için 0,5–1,5 milyar parametreli, Q4_K_M nicemlemeli '
-          'Türkçe destekli bir model (ör. Qwen2.5 Instruct, Apache-2.0) uygundur.',
+          'küçük bir model seçebilirsin. Türkçe yanıt kalitesini ve dağıtım lisansını ayrıca dene; '
+          'küçük modeller yönergeleri her zaman izlemeyebilir.',
           style: t.textTheme.bodySmall,
         ),
       ],

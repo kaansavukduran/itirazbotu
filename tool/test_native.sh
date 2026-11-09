@@ -10,7 +10,10 @@ if [[ ! -f third_party/llama.cpp/CMakeLists.txt ]]; then
 fi
 cmake -S native -B build/native -G Ninja -DCMAKE_BUILD_TYPE=Release >/dev/null
 cmake --build build/native --target itiraz_native --parallel "${ITIRAZ_BUILD_JOBS:-4}"
-python3 -c "import numpy" 2>/dev/null || { echo "numpy gerekli: pip install numpy"; exit 1; }
+python3 -c "import numpy, yaml, tqdm" 2>/dev/null || {
+  echo 'Test bağımlılıkları eksik. Kurulum sırasında: pip install ./third_party/llama.cpp/gguf-py'
+  exit 1
+}
 python3 tool/make_test_model.py build/test-model.gguf build/bozuk.gguf
 LIB=build/native/libitiraz_native.so
 [[ "$(uname)" == Darwin ]] && LIB=$(find build/native -name itiraz_native -path '*framework*' -type f | head -1)
