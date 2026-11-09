@@ -27,10 +27,8 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
-        // Yerel model köprüsü yalnızca 64 bit ARM ve x86_64 için derlenir.
-        ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
-        }
+        // ABI seçimini Flutter'ın --target-platform / --split-per-abi bayrakları
+        // yönetir. Burada ndk.abiFilters koymak Gradle'ın split ayarıyla çakışır.
         externalNativeBuild {
             cmake {
                 arguments += listOf("-DCMAKE_BUILD_TYPE=Release", "-DANDROID_STL=c++_static")

@@ -11,7 +11,8 @@ const String refineSystemPrompt =
     'hemen denenebilecek somut bir adımı, en son yapay zekânın yardım edebileceği en küçük '
     'parçayı söyle. Başlık, liste ya da emoji kullanma. Kişisel bilgi isteme.';
 
-String buildRefinePrompt(String task, Verdict v) => 'Görev: "$task"\n\n'
+String buildRefinePrompt(String task, Verdict v) =>
+    'Görev: "$task"\n\n'
     'Kurallı değerlendirme:\n${v.toPlainText()}\n\n'
     'Bu değerlendirmeyi bu göreve özel olarak ayrıntılandır.';
 
@@ -24,3 +25,10 @@ String cleanModelOutput(String s) {
   t = t.replaceAll(RegExp(r'<think>[\s\S]*?</think>'), '');
   return t.trim();
 }
+
+/// Küçük modeller bazen açıklama üretmek yerine girdiyi kopyalar. Bunu başarılı
+/// bir ayrıntı gibi sunmayalım; kurallı kart her durumda kullanılabilir kalır.
+bool isPromptEcho(String text) =>
+    text.trimLeft().startsWith('Görev:') ||
+    text.contains('Kurallı değerlendirme:') ||
+    (text.contains('Karar:') && text.contains('Gerekçe:'));

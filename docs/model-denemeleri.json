@@ -1,0 +1,56 @@
+{
+  "tarih": "2026-11-09",
+  "not": "Yükleme ve belirteç üretimi çalışır; bu örnekler dil kalitesinin yeterli olduğu anlamına gelmez. Her model için üç sabit örnek, sıcaklık 0, en fazla 160 belirteç.",
+  "denemeler": [
+    {
+      "model": "qwen2.5-0.5b-instruct",
+      "dosya_bayt": 491400032,
+      "mimari": "qwen2",
+      "sonuçlar": [
+        {
+          "görev": "Arkadaşıma özür mesajı yaz.",
+          "kurallı": "Karar: Kendin yap\nGerekçe: Özrün değeri, neye üzüldüğünü senin sözlerinle duymaktan gelir. Hazır cümleler bunu taşıyamaz.\nYapay zekâsız yol: Neye üzüldüğünü ve telafi için ne yapacağını kendi sözlerinle, iki üç cümleyle yaz.\nDestek sınırı: İstersen yazdığını okutup yalnızca suçlayıcı kaçan bir ifade olup olmadığını sorabilirsin.",
+          "yerel_yanıt": "Görev: \"Arkadaşıma özür mesajı yaz.\"\n\nKurallı değerlendirme:\nKarar: Kendin yap\nGerekçe: Özrün değeri, neye üzüldüğünü senin sözlerinle duymaktan gelir. Hazır cümleler bunu taşıyamaz.\nYapay zekâsız yol: Neye üzüldüğünü ve telafi için ne yapacağını kendi sözlerinle, iki üç cümleyle yaz.\n\nBu değerlendirmeyi bu göreve özel olarak ayrıntılandır.",
+          "belirteç": 122
+        },
+        {
+          "görev": "Bu matematik sorusunu çöz.",
+          "kurallı": "Karar: Sınırlı destek al\nGerekçe: Bu soruyu çözmek, sonra gelecek benzerlerini çözebilmek demek. Hazır çözüm sınavda yanında olmaz.\nYapay zekâsız yol: Önce kendi adımını dene: verilenleri ve isteneni ayrı ayrı yaz, ilk işlemi yap.\nDestek sınırı: Takıldığın adımda yalnızca bir ipucu iste; tam çözümü kendi denemenle karşılaştırmak için kullan.",
+          "yerel_yanıt": "Bu matematik sorusunu çözme: Sınırlı destek al, önce kendi adımını dene, verilenleri ve isteneni ayrı ayrı yaz, ilk işlemi yap. Hazır çözüm sınavda yanında olmaz.",
+          "belirteç": 52
+        },
+        {
+          "görev": "Bu paragrafı sadeleştir.",
+          "kurallı": "Karar: Yapay zekâya devredebilirsin\nGerekçe: Sadeleştirme, anlamı koruyup biçimi değiştiren mekanik bir iş; yapay zekâ burada iyidir.\nYapay zekâsız yol: Metnin ana fikrini tek cümleyle not et; sadeleşmiş hâl bu cümleyle uyuşmalı.\nDestek sınırı: Sadeleştirmeyi yaptırabilirsin; metnin anlamını son okumada kendin kontrol et.",
+          "yerel_yanıt": "Görev: \"Bu paragrafı sadeleştir.\"\n\nKurallı değerlendirme:\nKarar: Yapay zekâya devredebilirsin\nGerekçe: Sadeleştirme, anlamı koruyup biçimi değiştiren mekanik bir iş; yapay zekâ burada iyidir.\nYapay zekâsız yol: Metnin ana fikrini tek cümleyle not et; sadeleşmiş hâl bu cümleyle uyuşmalı.\nDestek sınırı: Sadeleştirmeyi yaptırabilirsin; metnin anlamını son okumada kendin kontrol et.\n\nBu değerlendirmeyi bu göreve özel olarak ayrıntılandır.",
+          "belirteç": 152
+        }
+      ]
+    },
+    {
+      "model": "qwen2.5-1.5b-instruct",
+      "dosya_bayt": 1117320736,
+      "mimari": "qwen2",
+      "sonuçlar": [
+        {
+          "görev": "Arkadaşıma özür mesajı yaz.",
+          "kurallı": "Karar: Kendin yap\nGerekçe: Özrün değeri, neye üzüldüğünü senin sözlerinle duymaktan gelir. Hazır cümleler bunu taşıyamaz.\nYapay zekâsız yol: Neye üzüldüğünü ve telafi için ne yapacağını kendi sözlerinle, iki üç cümleyle yaz.\nDestek sınırı: İstersen yazdığını okutup yalnızca suçlayıcı kaçan bir ifade olup olmadığını sorabilirsin.",
+          "yerel_yanıt": "Görev: \"Arkadaşıma özür mesajı yaz.\"\n\nKurallı değerlendirme:\nKarar: Kendin yap\nGerekçe: Özrün değeri, neye üzüldüğünü senin sözlerinle duymaktan gelir. Hazır cümleler bunu taşıyamaz.\nYapay zekâsız yol: Neye üzüldüğünü ve telafi için ne yapacağını kendi sözlerinle, iki üç cümleyle yaz.\n\nÖzür mesajı:\n\nArkadaşım, seni özür dilerim. Seninle birlikte olduğumda, seninle ilgili olmamak istiyorum. Seninle birlikte olduğumda, sen",
+          "belirteç": 160
+        },
+        {
+          "görev": "Bu matematik sorusunu çöz.",
+          "kurallı": "Karar: Sınırlı destek al\nGerekçe: Bu soruyu çözmek, sonra gelecek benzerlerini çözebilmek demek. Hazır çözüm sınavda yanında olmaz.\nYapay zekâsız yol: Önce kendi adımını dene: verilenleri ve isteneni ayrı ayrı yaz, ilk işlemi yap.\nDestek sınırı: Takıldığın adımda yalnızca bir ipucu iste; tam çözümü kendi denemenle karşılaştırmak için kullan.",
+          "yerel_yanıt": "Görev: \"Bu matematik sorusunu çöz.\"\n\nKurallı değerlendirme:\nKarar: Sınırlı destek al\nGerekçe: Bu soruyu çözmek, sonra gelecek benzerlerini çözebilmek demek. Hazır çözüm sınavda yanında olmaz.\nYapay zekâsız yol: Önce kendi adımını dene: verilenleri ve isteneni ayrı ayrı yaz, ilk işlemi yap.\nDestek sınırı: Takıldığın adımda yalnızca bir ipucu iste; tam çözümü kendi denemenle karşılaştirmak için kullan.",
+          "belirteç": 141
+        },
+        {
+          "görev": "Bu paragrafı sadeleştir.",
+          "kurallı": "Karar: Yapay zekâya devredebilirsin\nGerekçe: Sadeleştirme, anlamı koruyup biçimi değiştiren mekanik bir iş; yapay zekâ burada iyidir.\nYapay zekâsız yol: Metnin ana fikrini tek cümleyle not et; sadeleşmiş hâl bu cümleyle uyuşmalı.\nDestek sınırı: Sadeleştirmeyi yaptırabilirsin; metnin anlamını son okumada kendin kontrol et.",
+          "yerel_yanıt": "Görev: \"Bu paragrafı sadeleştir.\"\n\nKurallı değerlendirme:\nKarar: Yapay zekâya devredebilirsin\nGerekçe: Sadeleştirme, anlamı koruyup biçimi değiştiren mekanik bir iş; yapay zekâ burada iyidir.\nYapay zekâsız yol: Metnin ana fikrini tek cümleyle not et; sadeleşmiş hâl bu cümleyle uyuşmalı.\nDestek sınırı: Sadeleştirmeyi yaptırabilirsin; metnin anlamını son okumada kendin kontrol et.\n\nBu değerlendirmeyi bu göreve özel olarak ayrıntılandır:\n\n1. Ana fikir ve intent",
+          "belirteç": 160
+        }
+      ]
+    }
+  ]
+}

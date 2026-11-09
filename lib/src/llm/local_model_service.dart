@@ -54,6 +54,8 @@ class LocalModelService {
   ReceivePort? _fromWorker;
   StreamController<Object?>? _replies;
   Stream<Object?>? _replyStream;
+  Future<void>? _loading;
+  bool _disposed = false;
 
   int _handle = 0;
   Pointer<Float>? _progress;
@@ -114,68 +116,104 @@ class LocalModelService {
 
   /// Modeli yükler. [onProgress] 0..1 arası ilerleme bildirir.
   /// Bellek yetersizse, dosya bozuksa ya da iptal edilirse [ModelLoadException] fırlatır.
-  Future<void> load(String path, {String? displayName, void Function(double)? onProgress}) async {
+  Future<void> load(String path, {String? displayName, void Function(double)? onProgress}) {
+    if (_disposed) {
+      return Future<void>.error(const ModelLoadException('Model hizmeti kapatıldı.'));
+    }
     if (!isSupported) {
-      throw ModelLoadException(unsupportedReason ?? 'Yerel model bu kurulumda desteklenmiyor.');
+      return Future<void>.error(ModelLoadException(unsupportedReason ?? 'Yerel model bu kurulumda desteklenmiyor.'));
     }
     if (_state == ModelState.loading || _state == ModelState.generating) {
-      throw const ModelLoadException('Önce süren işlemin bitmesini bekleyin.');
+      return Future<void>.error(const ModelLoadException('Önce süren işlemin bitmesini bekleyin.'));
     }
-    final file = File(path);
-    if (!file.existsSync()) throw const ModelLoadException('Model dosyası bulunamadı.');
-
-    // Önce başlığı denetle: bozuk dosyayı llama.cpp'ye hiç vermeyelim.
-    try {
-      await inspectGgufFile(path);
-    } on GgufException catch (e) {
-      lastError = e.message;
-      _set(ModelState.error);
-      throw ModelLoadException(e.message);
-    }
-
-    final size = file.lengthSync();
-    final ram = availableRam();
-    // Kabaca: ağırlıklar + bağlam önbelleği + çalışma alanı.
-    final need = (size * 1.1).round() + 256 * 1024 * 1024;
-    if (ram > 0 && need > ram) {
-      lastError = 'Cihaz belleği bu model için yetmiyor: yaklaşık ${formatBytes(need)} gerekli, '
-          '${formatBytes(ram)} boş. Daha küçük bir model (ör. 0,5–1,5 milyar parametre, Q4) deneyin.';
-      _set(ModelState.error);
-      throw ModelLoadException(lastError!);
-    }
-
-    await unload();
-    await _ensureWorker();
     _progress ??= calloc<Float>();
     _loadCancel ??= calloc<Int32>();
     _progress!.value = 0;
     _loadCancel!.value = 0;
     _set(ModelState.loading);
+    final operation = _load(path, displayName: displayName, onProgress: onProgress);
+    _loading = operation;
+    return operation.whenComplete(() => _loading = null);
+  }
 
-    final timer = Timer.periodic(const Duration(milliseconds: 100), (_) => onProgress?.call(_progress!.value));
-    final reply = _replyStream!.firstWhere((m) => m is Map && m['op'] == 'loaded');
-    _toWorker!.send({
-      'op': 'load',
-      'path': path,
-      'ctx': contextSize,
-      'threads': threads > 0 ? threads : _defaultThreads(),
-      'progress': _progress!.address,
-      'cancel': _loadCancel!.address,
-    });
-    final res = await reply as Map;
-    timer.cancel();
-    if (res['handle'] is int && res['handle'] != 0) {
-      _handle = res['handle'] as int;
-      _loadedPath = path;
-      loadedName = displayName ?? file.uri.pathSegments.last;
-      lastError = null;
-      onProgress?.call(1);
-      _set(ModelState.ready);
-    } else {
-      final cancelled = _loadCancel!.value != 0;
-      lastError = res['error'] as String? ?? 'Model açılamadı.';
-      _set(cancelled ? ModelState.empty : ModelState.error);
-      throw ModelLoadException(lastError!, cancelled: cancelled);
+  void _checkLoadCancelled() {
+    if (_loadCancel!.value != 0) {
+      throw const ModelLoadException('Model yüklemesi iptal edildi.', cancelled: true);
+    }
+  }
+
+  Future<void> _load(String path, {String? displayName, void Function(double)? onProgress}) async {
+    Timer? timer;
+    try {
+      final file = File(path);
+      if (!file.existsSync()) {
+        throw const ModelLoadException('Model dosyası bulunamadı.');
+      }
+
+      // Önce başlığı denetle: bozuk dosyayı llama.cpp'ye hiç vermeyelim.
+      try {
+        await inspectGgufFile(path);
+      } on GgufException catch (e) {
+        lastError = e.message;
+        _set(ModelState.error);
+        throw ModelLoadException(e.message);
+      }
+
+      final size = file.lengthSync();
+      final ram = availableRam();
+      // Kabaca: ağırlıklar + bağlam önbelleği + çalışma alanı.
+      final need = (size * 1.1).round() + 256 * 1024 * 1024;
+      if (ram > 0 && need > ram) {
+        lastError =
+            'Cihaz belleği bu model için yetmiyor: yaklaşık ${formatBytes(need)} gerekli, '
+            '${formatBytes(ram)} boş. Daha küçük bir model (ör. 0,5–1,5 milyar parametre, Q4) deneyin.';
+        _set(ModelState.error);
+        throw ModelLoadException(lastError!);
+      }
+
+      _checkLoadCancelled();
+      await _unloadHandle();
+      await _ensureWorker();
+      _checkLoadCancelled();
+
+      timer = Timer.periodic(const Duration(milliseconds: 100), (_) => onProgress?.call(_progress!.value));
+      final reply = _replyStream!.firstWhere((m) => m is Map && m['op'] == 'loaded');
+      _toWorker!.send({
+        'op': 'load',
+        'path': path,
+        'ctx': contextSize,
+        'threads': threads > 0 ? threads : _defaultThreads(),
+        'progress': _progress!.address,
+        'cancel': _loadCancel!.address,
+      });
+      final res = await reply as Map;
+      if (res['handle'] is int && res['handle'] != 0) {
+        _handle = res['handle'] as int;
+        if (_loadCancel!.value != 0) {
+          await _unloadHandle();
+          _checkLoadCancelled();
+        }
+        _loadedPath = path;
+        loadedName = displayName ?? file.uri.pathSegments.last;
+        lastError = null;
+        onProgress?.call(1);
+        _set(ModelState.ready);
+      } else {
+        final cancelled = _loadCancel!.value != 0;
+        lastError = res['error'] as String? ?? 'Model açılamadı.';
+        _set(cancelled ? ModelState.empty : ModelState.error);
+        throw ModelLoadException(lastError!, cancelled: cancelled);
+      }
+    } on ModelLoadException catch (e) {
+      lastError = e.message;
+      _set(e.cancelled ? (isLoaded ? ModelState.ready : ModelState.empty) : ModelState.error);
+      rethrow;
+    } on FileSystemException {
+      lastError = 'Model dosyası okunamadı. Dosyanın erişim iznini kontrol edin.';
+      _set(ModelState.error);
+      throw ModelLoadException(lastError!);
+    } finally {
+      timer?.cancel();
     }
   }
 
@@ -190,6 +228,7 @@ class LocalModelService {
     required String user,
     int maxTokens = 320,
     double temperature = 0.4,
+    int? seed,
   }) {
     final out = StreamController<GenerationEvent>();
     if (_handle == 0 || _state != ModelState.ready) {
@@ -199,6 +238,9 @@ class LocalModelService {
       return out.stream;
     }
     _set(ModelState.generating);
+    // İptal bayrağını işçiye işi yollamadan sıfırla: aynı turda gelen Durdur
+    // isteği ib_start tarafından yanlışlıkla silinmesin.
+    _bridge!.prepareGeneration(Pointer<Void>.fromAddress(_handle));
     final id = DateTime.now().microsecondsSinceEpoch;
     late StreamSubscription<Object?> sub;
     sub = _replyStream!.listen((m) {
@@ -206,11 +248,13 @@ class LocalModelService {
       if (m['op'] == 'chunk') {
         out.add(GenerationChunk(m['text'] as String));
       } else if (m['op'] == 'done') {
-        out.add(GenerationFinished(
-          cancelled: m['cancelled'] == true,
-          error: m['error'] as String?,
-          tokenCount: m['tokens'] as int? ?? 0,
-        ));
+        out.add(
+          GenerationFinished(
+            cancelled: m['cancelled'] == true,
+            error: m['error'] as String?,
+            tokenCount: m['tokens'] as int? ?? 0,
+          ),
+        );
         sub.cancel();
         out.close();
         _set(_handle != 0 ? ModelState.ready : ModelState.empty);
@@ -224,6 +268,7 @@ class LocalModelService {
       'user': user,
       'max': maxTokens,
       'temp': temperature,
+      'seed': seed,
     });
     return out.stream;
   }
@@ -237,6 +282,17 @@ class LocalModelService {
 
   /// Modeli bellekten çıkarır.
   Future<void> unload() async {
+    if (_loading != null) {
+      cancelLoad();
+      try {
+        await _loading;
+      } on ModelLoadException catch (_) {}
+    }
+    await _unloadHandle();
+    _set(ModelState.empty);
+  }
+
+  Future<void> _unloadHandle() async {
     if (_handle == 0) return;
     stop();
     final h = _handle;
@@ -246,10 +302,11 @@ class LocalModelService {
     final done = _replyStream!.firstWhere((m) => m is Map && m['op'] == 'freed');
     _toWorker!.send({'op': 'free', 'handle': h});
     await done;
-    _set(ModelState.empty);
   }
 
   Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
     await unload();
     _toWorker?.send({'op': 'exit'});
     _isolate?.kill(priority: Isolate.beforeNextEvent);
@@ -286,9 +343,15 @@ void _workerMain(List<Object?> args) {
         final path = (m['path'] as String).toNativeUtf8();
         final err = calloc<Uint8>(512);
         try {
-          final h = bridge.load(path, m['ctx'] as int, m['threads'] as int,
-              Pointer<Float>.fromAddress(m['progress'] as int), Pointer<Int32>.fromAddress(m['cancel'] as int),
-              err.cast<Utf8>(), 512);
+          final h = bridge.load(
+            path,
+            m['ctx'] as int,
+            m['threads'] as int,
+            Pointer<Float>.fromAddress(m['progress'] as int),
+            Pointer<Int32>.fromAddress(m['cancel'] as int),
+            err.cast<Utf8>(),
+            512,
+          );
           toMain.send({
             'op': 'loaded',
             'handle': h.address,
@@ -319,9 +382,7 @@ void _generate(NativeBridge b, Map m, SendPort toMain) {
   var tokens = 0;
   // Belirteçler UTF-8 karakterin ortasında bölünebilir; akış çözücü bunları birleştirir.
   final pending = StringBuffer();
-  final sink = const Utf8Decoder(allowMalformed: true).startChunkedConversion(
-    _StringSink(pending),
-  );
+  final sink = const Utf8Decoder(allowMalformed: true).startChunkedConversion(_StringSink(pending));
   var lastFlush = DateTime.now();
   void flush() {
     if (pending.isEmpty) return;
@@ -331,8 +392,14 @@ void _generate(NativeBridge b, Map m, SendPort toMain) {
   }
 
   try {
-    final rc = b.start(h, sys, usr, m['max'] as int, (m['temp'] as num).toDouble(),
-        DateTime.now().millisecondsSinceEpoch & 0x7fffffff);
+    final rc = b.start(
+      h,
+      sys,
+      usr,
+      m['max'] as int,
+      (m['temp'] as num).toDouble(),
+      (m['seed'] as int?) ?? (DateTime.now().millisecondsSinceEpoch & 0x7fffffff),
+    );
     if (rc == 1) {
       toMain.send({'op': 'done', 'id': id, 'cancelled': true});
       return;
@@ -357,7 +424,7 @@ void _generate(NativeBridge b, Map m, SendPort toMain) {
       }
       tokens++;
       if (n > 0) sink.add(buf.asTypedList(n).toList());
-      if (DateTime.now().difference(lastFlush).inMilliseconds > 40) flush();
+      if (tokens == 1 || DateTime.now().difference(lastFlush).inMilliseconds > 40) flush();
     }
   } finally {
     calloc.free(sys);

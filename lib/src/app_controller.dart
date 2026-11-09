@@ -27,7 +27,7 @@ class AppController extends ChangeNotifier {
     required this.assetLoader,
     this.engine = const RuleEngine(),
   }) {
-    models.states.listen((_) => notifyListeners());
+    _modelStateSub = models.states.listen((_) => notifyListeners());
   }
 
   final RuleEngine engine;
@@ -48,6 +48,9 @@ class AppController extends ChangeNotifier {
   String? refineError;
   String? refineModelName;
   StreamSubscription<GenerationEvent>? _refineSub;
+  late final StreamSubscription<ModelState> _modelStateSub;
+  int _refineRevision = 0;
+  bool _disposed = false;
 
   // --- Model yönetimi ---
   List<StoredModel> storedModels = [];
@@ -67,7 +70,7 @@ class AppController extends ChangeNotifier {
 
   /// Kurallı değerlendirme. Ağ ve model gerektirmez, anında döner.
   void evaluate(String input, {TaskType? type}) {
-    stopRefine();
+    _discardRefine();
     refineStatus = RefineStatus.none;
     refineText = '';
     refineError = null;
@@ -76,15 +79,17 @@ class AppController extends ChangeNotifier {
       verdict = v;
       lastInput = input.trim();
       inputError = null;
-      unawaited(history.add(
-        HistoryEntry(
-          time: DateTime.now(),
-          input: lastInput,
-          outcome: v.needsClarification ? 'Soru soruldu' : v.decision!.label,
-          mode: 'Kurallı değerlendirme',
+      unawaited(
+        history.add(
+          HistoryEntry(
+            time: DateTime.now(),
+            input: lastInput,
+            outcome: v.needsClarification ? 'Soru soruldu' : v.decision!.label,
+            mode: 'Kurallı değerlendirme',
+          ),
+          enabled: settings.historyEnabled,
         ),
-        enabled: settings.historyEnabled,
-      ));
+      );
     } on EmptyInputException catch (e) {
       verdict = null;
       inputError = e.message;
@@ -93,7 +98,7 @@ class AppController extends ChangeNotifier {
   }
 
   void clearResult() {
-    stopRefine();
+    _discardRefine();
     verdict = null;
     inputError = null;
     refineStatus = RefineStatus.none;
@@ -101,13 +106,14 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool get canRefine =>
-      verdict != null && !verdict!.needsClarification && models.state == ModelState.ready;
+  bool get canRefine => verdict != null && !verdict!.needsClarification && models.state == ModelState.ready;
 
   /// Yalnızca kullanıcı "Yerel modelle ayrıntılandır" dediğinde çalışır.
   void refine() {
     final v = verdict;
-    if (v == null || v.needsClarification) return;
+    if (v == null || v.needsClarification || refineStatus == RefineStatus.running) {
+      return;
+    }
     if (models.state != ModelState.ready) {
       refineStatus = RefineStatus.failed;
       refineError = 'Yerel model yüklü değil. Kurallı sonuç geçerliliğini koruyor.';
@@ -118,10 +124,12 @@ class AppController extends ChangeNotifier {
     refineText = '';
     refineError = null;
     refineModelName = models.loadedName;
+    final revision = ++_refineRevision;
+    final input = lastInput;
+    final modelName = refineModelName;
     notifyListeners();
-    _refineSub = models
-        .generate(system: refineSystemPrompt, user: buildRefinePrompt(lastInput, v))
-        .listen((e) {
+    _refineSub = models.generate(system: refineSystemPrompt, user: buildRefinePrompt(input, v)).listen((e) {
+      if (_disposed || revision != _refineRevision) return;
       switch (e) {
         case GenerationChunk(:final text):
           refineText += text;
@@ -135,17 +143,25 @@ class AppController extends ChangeNotifier {
           } else if (refineText.trim().isEmpty) {
             refineStatus = RefineStatus.failed;
             refineError = 'Model boş yanıt döndürdü. Kurallı sonuç geçerliliğini koruyor.';
+          } else if (isPromptEcho(refineText)) {
+            refineStatus = RefineStatus.failed;
+            refineText = '';
+            refineError =
+                'Model, açıklama yerine girdiyi tekrarladı. Başka bir model deneyebilirsin; '
+                'kurallı sonuç geçerliliğini koruyor.';
           } else {
             refineStatus = RefineStatus.done;
-            unawaited(history.add(
-              HistoryEntry(
-                time: DateTime.now(),
-                input: lastInput,
-                outcome: '${v.decision!.label} + ayrıntı',
-                mode: 'Yerel model · ${refineModelName ?? ''}',
+            unawaited(
+              history.add(
+                HistoryEntry(
+                  time: DateTime.now(),
+                  input: input,
+                  outcome: '${v.decision!.label} + ayrıntı',
+                  mode: 'Yerel model · ${modelName ?? ''}',
+                ),
+                enabled: settings.historyEnabled,
               ),
-              enabled: settings.historyEnabled,
-            ));
+            );
           }
       }
       notifyListeners();
@@ -154,6 +170,13 @@ class AppController extends ChangeNotifier {
 
   void stopRefine() {
     if (refineStatus == RefineStatus.running) models.stop();
+  }
+
+  void _discardRefine() {
+    stopRefine();
+    _refineRevision++;
+    unawaited(_refineSub?.cancel());
+    _refineSub = null;
   }
 
   // --- Model yönetimi ---
@@ -169,11 +192,14 @@ class AppController extends ChangeNotifier {
     modelLoadProgress = 0;
     notifyListeners();
     try {
-      await models.load(m.path,
-          displayName: _nameFor(m), onProgress: (p) {
-            modelLoadProgress = p;
-            notifyListeners();
-          });
+      await models.load(
+        m.path,
+        displayName: _nameFor(m),
+        onProgress: (p) {
+          modelLoadProgress = p;
+          notifyListeners();
+        },
+      );
       await settings.update(model: m.path);
       modelMessage = 'Model hazır: ${_nameFor(m)}';
     } on ModelLoadException catch (e) {
@@ -195,7 +221,9 @@ class AppController extends ChangeNotifier {
   Future<void> deleteModel(StoredModel m) async {
     if (models.loadedPath == m.path) await models.unload();
     await store.delete(m);
-    if (settings.activeModelPath == m.path) await settings.update(clearModel: true);
+    if (settings.activeModelPath == m.path) {
+      await settings.update(clearModel: true);
+    }
     modelMessage = '${m.fileName} silindi.';
     await refreshModels();
   }
@@ -228,6 +256,8 @@ class AppController extends ChangeNotifier {
       modelMessage = e.message;
     } on ImportFailure catch (e) {
       modelMessage = e.message;
+    } on FileSystemException {
+      modelMessage = 'Model dosyası kopyalanamadı. Erişim iznini ve boş alanı kontrol edin.';
     } finally {
       importProgress = null;
       importLabel = null;
@@ -255,6 +285,8 @@ class AppController extends ChangeNotifier {
       modelMessage = e.message;
     } on ImportFailure catch (e) {
       modelMessage = e.message;
+    } on FileSystemException {
+      modelMessage = 'Paketteki model hazırlanamadı. Erişim iznini ve boş alanı kontrol edin.';
     } finally {
       importProgress = null;
       importLabel = null;
@@ -297,7 +329,10 @@ class AppController extends ChangeNotifier {
 
   @override
   void dispose() {
-    _refineSub?.cancel();
+    _discardRefine();
+    _disposed = true;
+    unawaited(_modelStateSub.cancel());
+    cancelImport();
     unawaited(models.dispose());
     super.dispose();
   }

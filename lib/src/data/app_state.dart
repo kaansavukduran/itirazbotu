@@ -12,6 +12,7 @@ class AppSettings extends ChangeNotifier {
   AppSettings(this._file);
 
   final File _file;
+  Future<void> _pendingSave = Future<void>.value();
 
   ThemeMode themeMode = ThemeMode.system;
   bool largeText = false;
@@ -31,16 +32,20 @@ class AppSettings extends ChangeNotifier {
     }
   }
 
-  Future<void> _save() async {
-    try {
-      await _file.parent.create(recursive: true);
-      await _file.writeAsString(jsonEncode({
-        'theme': themeMode.name,
-        'largeText': largeText,
-        'history': historyEnabled,
-        'activeModel': activeModelPath,
-      }));
-    } catch (_) {}
+  Future<void> _save() {
+    final snapshot = jsonEncode({
+      'theme': themeMode.name,
+      'largeText': largeText,
+      'history': historyEnabled,
+      'activeModel': activeModelPath,
+    });
+    _pendingSave = _pendingSave
+        .then((_) async {
+          await _file.parent.create(recursive: true);
+          await _file.writeAsString(snapshot);
+        })
+        .catchError((Object _) {});
+    return _pendingSave;
   }
 
   Future<void> update({ThemeMode? theme, bool? large, bool? history, String? model, bool clearModel = false}) async {
@@ -58,11 +63,11 @@ class HistoryEntry {
   HistoryEntry({required this.time, required this.input, required this.outcome, required this.mode});
 
   factory HistoryEntry.fromJson(Map<String, dynamic> j) => HistoryEntry(
-        time: DateTime.tryParse(j['t'] as String? ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0),
-        input: j['i'] as String? ?? '',
-        outcome: j['o'] as String? ?? '',
-        mode: j['m'] as String? ?? '',
-      );
+    time: DateTime.tryParse(j['t'] as String? ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0),
+    input: j['i'] as String? ?? '',
+    outcome: j['o'] as String? ?? '',
+    mode: j['m'] as String? ?? '',
+  );
 
   final DateTime time;
   final String input;
@@ -78,6 +83,7 @@ class HistoryStore extends ChangeNotifier {
   final File _file;
   static const int maxEntries = 200;
   final List<HistoryEntry> _entries = [];
+  Future<void> _pendingWrite = Future<void>.value();
   List<HistoryEntry> get entries => List.unmodifiable(_entries);
 
   Future<void> load() async {
@@ -92,23 +98,33 @@ class HistoryStore extends ChangeNotifier {
   }
 
   /// Yalnızca geçmiş açıksa çağrılmalı; [enabled] bunu ikinci kez güvenceye alır.
-  Future<void> add(HistoryEntry e, {required bool enabled}) async {
-    if (!enabled) return;
+  Future<void> add(HistoryEntry e, {required bool enabled}) {
+    if (!enabled) return Future<void>.value();
     _entries.insert(0, e);
-    if (_entries.length > maxEntries) _entries.removeRange(maxEntries, _entries.length);
+    if (_entries.length > maxEntries) {
+      _entries.removeRange(maxEntries, _entries.length);
+    }
     notifyListeners();
-    try {
+    final snapshot = jsonEncode(_entries.map((e) => e.toJson()).toList());
+    return _enqueue(() async {
       await _file.parent.create(recursive: true);
-      await _file.writeAsString(jsonEncode(_entries.map((e) => e.toJson()).toList()));
-    } catch (_) {}
+      await _file.writeAsString(snapshot);
+    });
   }
 
   /// Tek dokunuşla temizleme: bellek ve dosya birlikte silinir.
-  Future<void> clear() async {
+  Future<void> clear() {
     _entries.clear();
     notifyListeners();
-    try {
+    return _enqueue(() async {
       if (_file.existsSync()) await _file.delete();
-    } catch (_) {}
+    });
+  }
+
+  // Silme, kendisinden önce başlayan yazmayı bekler. Böylece temizlenen geçmiş
+  // gecikmiş bir dosya işlemiyle yeniden ortaya çıkmaz.
+  Future<void> _enqueue(Future<void> Function() operation) {
+    _pendingWrite = _pendingWrite.then((_) => operation()).catchError((Object _) {});
+    return _pendingWrite;
   }
 }

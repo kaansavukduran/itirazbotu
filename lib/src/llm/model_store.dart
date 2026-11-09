@@ -9,6 +9,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
+
 import 'gguf_inspector.dart';
 
 /// İçe aktarma ya da hazırlama sırasında iptal için.
@@ -43,21 +45,30 @@ class StoredModel {
 
 /// Paketle gelen modelin tanımı (assets/bundled_model/manifest.json).
 class BundledModelManifest {
-  BundledModelManifest({required this.fileName, required this.size, required this.parts, this.displayName, this.license});
+  BundledModelManifest({
+    required this.fileName,
+    required this.size,
+    required this.parts,
+    this.displayName,
+    this.license,
+    this.sha256Hex,
+  });
 
   factory BundledModelManifest.fromJson(Map<String, dynamic> j) => BundledModelManifest(
-        fileName: j['file'] as String,
-        size: j['size'] as int,
-        parts: (j['parts'] as List).cast<String>(),
-        displayName: j['name'] as String?,
-        license: j['license'] as String?,
-      );
+    fileName: j['file'] as String,
+    size: j['size'] as int,
+    parts: (j['parts'] as List).cast<String>(),
+    displayName: j['name'] as String?,
+    license: j['license'] as String?,
+    sha256Hex: j['sha256'] as String?,
+  );
 
   final String fileName;
   final int size;
   final List<String> parts;
   final String? displayName;
   final String? license;
+  final String? sha256Hex;
 }
 
 /// Asset okuyucu: testlerde sahte, uygulamada `rootBundle.load`.
@@ -80,7 +91,9 @@ class ModelStore {
     final out = <StoredModel>[];
     await for (final e in dir.list()) {
       if (e is File && e.path.toLowerCase().endsWith('.gguf')) {
-        out.add(StoredModel(path: e.path, size: e.lengthSync(), bundled: e.path.contains('${Platform.pathSeparator}paket_')));
+        out.add(
+          StoredModel(path: e.path, size: e.lengthSync(), bundled: e.path.contains('${Platform.pathSeparator}paket_')),
+        );
       }
     }
     out.sort((a, b) => a.fileName.compareTo(b.fileName));
@@ -96,8 +109,10 @@ class ModelStore {
     dir.createSync(recursive: true);
     final free = freeDiskOf(dir.path);
     if (free >= 0 && free < need + safetyMargin) {
-      throw ImportFailure('Yeterli boş alan yok: ${formatBytes(need + safetyMargin)} gerekli, '
-          '${formatBytes(free)} boş. Yer açıp yeniden deneyin.');
+      throw ImportFailure(
+        'Yeterli boş alan yok: ${formatBytes(need + safetyMargin)} gerekli, '
+        '${formatBytes(free)} boş. Yer açıp yeniden deneyin.',
+      );
     }
   }
 
@@ -123,7 +138,9 @@ class ModelStore {
     CancelToken? cancel,
   }) async {
     final src = File(sourcePath);
-    if (!src.existsSync()) throw const ImportFailure('Seçilen dosya bulunamadı.');
+    if (!src.existsSync()) {
+      throw const ImportFailure('Seçilen dosya bulunamadı.');
+    }
     try {
       await inspectGgufFile(sourcePath);
     } on GgufException catch (e) {
@@ -139,6 +156,8 @@ class ModelStore {
       await for (final chunk in src.openRead()) {
         if (cancel?.isCancelled == true) throw const ImportCancelled();
         sink.add(chunk);
+        // Bekleyen yazmaları sınırlı tut; büyük modeller RAM'de birikmesin.
+        await sink.flush();
         done += chunk.length;
         onProgress?.call(done, total);
       }
@@ -168,7 +187,9 @@ class ModelStore {
     try {
       final data = await load('assets/bundled_model/manifest.json');
       final j = jsonDecode(utf8.decode(data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes)));
-      if (j is Map<String, dynamic> && j['file'] is String) return BundledModelManifest.fromJson(j);
+      if (j is Map<String, dynamic> && j['file'] is String) {
+        return BundledModelManifest.fromJson(j);
+      }
     } catch (_) {}
     return null;
   }
@@ -176,7 +197,9 @@ class ModelStore {
   /// Paketteki modelin hazırlanmış kopyası varsa onu döndürür.
   StoredModel? preparedBundled(BundledModelManifest m) {
     final f = File('${dir.path}${Platform.pathSeparator}paket_${m.fileName}');
-    if (f.existsSync() && f.lengthSync() == m.size) return StoredModel(path: f.path, size: m.size, bundled: true);
+    if (f.existsSync() && f.lengthSync() == m.size) {
+      return StoredModel(path: f.path, size: m.size, bundled: true);
+    }
     return null;
   }
 
@@ -205,7 +228,19 @@ class ModelStore {
         onProgress?.call(done, m.size);
       }
       await sink.close();
-      if (part.lengthSync() != m.size) throw const ImportFailure('Paketteki model eksik; uygulamayı yeniden kurun.');
+      if (cancel?.isCancelled == true) throw const ImportCancelled();
+      if (part.lengthSync() != m.size) {
+        throw const ImportFailure('Paketteki model eksik; uygulamayı yeniden kurun.');
+      }
+      try {
+        await inspectGgufFile(part.path);
+      } on GgufException catch (e) {
+        throw ImportFailure('Paketteki model açılamadı: ${e.message}');
+      }
+      if (m.sha256Hex != null && (await sha256.bind(part.openRead()).first).toString() != m.sha256Hex) {
+        throw const ImportFailure('Paketteki modelin bütünlük denetimi başarısız. Uygulamayı yeniden kurun.');
+      }
+      if (cancel?.isCancelled == true) throw const ImportCancelled();
       await part.rename(target.path);
       return StoredModel(path: target.path, size: m.size, bundled: true);
     } catch (e) {
