@@ -78,18 +78,22 @@ void main() {
   test(
     'üretim kullanıcı tarafından durdurulur',
     () async {
+      await svc.dispose();
+      svc = LocalModelService(contextSize: 4096, threads: 1);
       await svc.load(model!);
       final events = <GenerationEvent>[];
       final done = Completer<void>();
-      svc.generate(system: '', user: 'Uzun bir hikâye anlat', maxTokens: 200, temperature: 0.8).listen((e) {
+      // İlk gerçek parçadan sonra yeterince uzun, sabit tohumlu bir üretimi
+      // durdur. Hızlı CI makinesi 200 belirteci iki parçadan önce bitirebilir.
+      svc.generate(system: '', user: 'Uzun bir hikâye anlat', maxTokens: 3000, temperature: 0.8, seed: 42).listen((e) {
         events.add(e);
-        if (e is GenerationChunk && events.length == 2) svc.stop();
+        if (e is GenerationChunk) svc.stop();
         if (e is GenerationFinished) done.complete();
       });
       await done.future;
       final fin = events.last as GenerationFinished;
       expect(fin.cancelled, isTrue);
-      expect(fin.tokenCount, lessThan(200));
+      expect(fin.tokenCount, lessThan(3000));
       expect(svc.state, ModelState.ready, reason: 'iptalden sonra model kullanılabilir kalmalı');
       // Ardından yeniden üretilebilir.
       final again = await svc.generate(system: '', user: 'Tekrar', maxTokens: 4).toList();

@@ -228,6 +228,7 @@ class LocalModelService {
     required String user,
     int maxTokens = 320,
     double temperature = 0.4,
+    int? seed,
   }) {
     final out = StreamController<GenerationEvent>();
     if (_handle == 0 || _state != ModelState.ready) {
@@ -267,6 +268,7 @@ class LocalModelService {
       'user': user,
       'max': maxTokens,
       'temp': temperature,
+      'seed': seed,
     });
     return out.stream;
   }
@@ -396,7 +398,7 @@ void _generate(NativeBridge b, Map m, SendPort toMain) {
       usr,
       m['max'] as int,
       (m['temp'] as num).toDouble(),
-      DateTime.now().millisecondsSinceEpoch & 0x7fffffff,
+      (m['seed'] as int?) ?? (DateTime.now().millisecondsSinceEpoch & 0x7fffffff),
     );
     if (rc == 1) {
       toMain.send({'op': 'done', 'id': id, 'cancelled': true});
@@ -422,7 +424,7 @@ void _generate(NativeBridge b, Map m, SendPort toMain) {
       }
       tokens++;
       if (n > 0) sink.add(buf.asTypedList(n).toList());
-      if (DateTime.now().difference(lastFlush).inMilliseconds > 40) flush();
+      if (tokens == 1 || DateTime.now().difference(lastFlush).inMilliseconds > 40) flush();
     }
   } finally {
     calloc.free(sys);

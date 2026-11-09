@@ -23,6 +23,7 @@ class ControlledModel extends LocalModelService {
     required String user,
     int maxTokens = 320,
     double temperature = 0.4,
+    int? seed,
   }) {
     current = ModelState.generating;
     return events.stream;
