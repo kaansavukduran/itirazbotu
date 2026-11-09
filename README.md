@@ -356,6 +356,8 @@ Her platformda şu dört kontrolü ayrı ayrı yapın. **Bir platformun derlenme
 - Geçmiş **varsayılan olarak kapalıdır**. Açılırsa yalnızca cihazdaki `history.json`
   dosyasına yazılır; **Geçmişi temizle** dosyayı siler, geçmişi kapatmak da kayıtları siler.
 - Model dosyaları yalnızca uygulamanın kendi dizinine kopyalanır.
+- Android'de sistem yedeklemesi kapalıdır. iOS'ta uygulama destek dizini sistem
+  yedeklemesinden çıkarılır; bu ayarın gerçek cihaz doğrulaması ayrıca yapılmalıdır.
 
 ---
 

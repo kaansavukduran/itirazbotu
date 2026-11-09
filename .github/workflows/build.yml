@@ -2,9 +2,19 @@ name: Beş platform derlemesi
 
 on:
   pull_request:
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
+    paths:
+      - "lib/**"
+      - "test/**"
+      - "native/**"
+      - "tool/**"
+      - "ios/**"
+      - "macos/**"
+      - "android/**"
+      - "linux/**"
+      - "windows/**"
+      - "assets/**"
+      - "pubspec.*"
+      - ".github/workflows/**"
   workflow_dispatch:
 
 permissions:
