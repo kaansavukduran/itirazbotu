@@ -8,9 +8,15 @@ birbirinin yerine sayılmaz.
 |---|---|---|---|---|
 | Linux x64 | Evet, release | Evet, Xvfb üzerinde gerçek masaüstü uygulaması | Evet, temiz veri dizini ve yalnızca `lo` arayüzü | Evet, eğitimli Qwen GGUF içe aktarma/yükleme/üretim; dil kalitesi sınırlı |
 | Android ARM64 ve x64 | Evet, iki release APK | Hayır | Hayır | Hayır; yerel köprünün derlenmesi cihaz testi değildir |
-| Windows 11 | Bu çalışma ortamında hayır | Hayır | Hayır | Hayır |
-| macOS | Bu çalışma ortamında hayır | Hayır | Hayır | Hayır |
-| iPhone | Bu çalışma ortamında hayır | Hayır | Hayır | Hayır |
+| Windows 11 / x64 | Evet, Windows CI | Hayır | Hayır | Hayır |
+| macOS | Evet, Apple CI | Hayır | Hayır | Hayır |
+| iPhone | Evet, imzasız iOS `.app` | Hayır | Hayır | Hayır |
+
+[Son CI çalışması](https://github.com/kaansavukduran/itirazbotu/actions/runs/42603505371)
+uygulama kodunun `8ca9e8f09b3aa3deaf228f22812ae2460ec87c26` sürümünü doğruladı.
+Linux, Windows, Android ve Apple işleri **başarılı** tamamlandı. Apple işi hem
+macOS uygulamasını hem iPhone için imzasız `.app` çıktısını üretti. Sonraki yalnızca
+belgeleme değişiklikleri uygulama kodunu değiştirmez.
 
 ## Kullanılan araçlar
 
@@ -18,7 +24,9 @@ birbirinin yerine sayılmaz.
 - llama.cpp alt modülünün gerçek sabit kimliği:
   `a691b2345844ce1b430201fc5fd404ce062e05f2`. Önceki README'deki `b11900`
   ifadesi git alt modülüyle uyuşmuyordu; doküman ve arayüz düzeltildi.
-- Linux: Debian 13 x86_64, Clang 19, CMake 3.31.6, Ninja, GTK 3, Xvfb.
+- Windows CI: `windows-2022`, Visual Studio 2022/MSVC.
+- Apple CI: `macos-15`, Xcode 16.4, CocoaPods; yerel macOS, iOS cihaz ve simülatör xcframework dilimleri derlendi.
+- Linux CI: Ubuntu 24.04. Yerel doğrulama: Debian 13 x86_64, Clang 19, CMake 3.31.6, Ninja, GTK 3, Xvfb.
 - Android: JDK 21, SDK Platform 36, NDK **28.2.13676358**, CMake **3.22.1**.
   Bir dosya seçici bağımlılığı için Platform 35 de derleme sırasında kuruldu.
 - Yerel C köprüsünün ABI sürümü **2**. Dart ve kütüphane birlikte derlenmelidir.
@@ -59,7 +67,10 @@ Release uygulaması, yeni `XDG_DATA_HOME` ve `XDG_CONFIG_HOME` ile Xvfb üzerind
 `unshare -Urn` içinde çalıştırıldı. Ağ alanında yalnızca `lo` vardı. İlk açılış,
 örnekten kurallı karar, yerel dosya yolundan GGUF aktarımı, yükleme ve model
 üretimi arayüzden denendi. İlk denemenin `connect` izinde **0 AF_INET/AF_INET6**
-ve yalnızca yerel Unix soketi bağlantıları görüldü.
+ve yalnızca yerel Unix soketi bağlantıları görüldü. Son release tekrarında
+`tool/check_offline_linux.sh` ile **tüm ağ sistem çağrıları** da kaydedildi:
+6.133.832 baytlık izde **0 AF_INET/AF_INET6** satırı bulundu. Bu tekrar da temiz
+veri dizininde başlatıldı; kurallı karar, GGUF aktarımı/yükleme ve üretim yapıldı.
 
 Kendi masaüstünüzde tekrar etmek için:
 
@@ -113,23 +124,40 @@ boyutları ve manifest SHA-256 özeti denetlenir. Tam model lisansı da paketlen
 
 ## Kurulabilir çıktılar
 
-Çalışma alanındaki `dist/` altında Linux x64 arşivi ve Android ARM64/x64 APK'ları
-üretilir. Dosyalar model içermez. Android paketleri debug anahtarıyla imzalı
+Çalışma alanındaki `dist/` altında şu dosyalar üretildi. Kaynak kodla birlikte
+[CI çıktıları](https://github.com/kaansavukduran/itirazbotu/actions/runs/42603505371)
+da indirilebilir (GitHub saklama süresi: 14 gün).
+
+| Dosya | Kullanım |
+|---|---|
+| `itiraz-botu-windows-x64.zip` | Açıp `itiraz_botu.exe` çalıştır; VC++ x64 çalışma zamanı gerekebilir |
+| `itiraz-botu-linux-x64.tar.gz` | Açıp `itiraz-botu/itiraz_botu` çalıştır; glibc 2.38+ ve GTK 3 gerekir |
+| `itiraz-botu-android-arm64.apk` | Android 7.0/API 24+ ARM64 cihazına kur |
+| `itiraz-botu-android-x64.apk` | Android 7.0/API 24+ x86_64 cihaz/emülatörüne kur |
+| `itiraz-botu-macos.zip` | `.app` arşivi, Developer ID ile noterleştirilmedi |
+| `itiraz-botu-ios-imzasiz.zip` | **Kurulabilir IPA değildir**; gerçek iPhone için Xcode ve kullanıcıya ait imzalama gerekir |
+| `SHA256SUMS.txt` | Teslim edilen dosyaların SHA-256 özetleri |
+
+Dosyalar model içermez. Android paketleri debug anahtarıyla imzalı
 release derlemeleridir; mağaza yayını için kullanıcıya ait imzalama gerekir.
 APK izin dökümünde `INTERNET` yoktur. Bunun cihaz testi yerine geçmediğine dikkat edin.
 
 ## Diğer platformlar
 
 GitHub Actions iş akışı Linux, Windows, Android, macOS ve iOS derleme adımlarını
-içerir. Henüz çalışmamış veya tamamlanmamış bir işi başarılı saymayın. iOS CI
+içerir ve yukarıdaki çalışmada tamamı başarılı oldu. Cihazda çalışma ve çevrimdışı ilk açılış sütunları bu yüzden otomatik olarak başarılı yapılmadı. iOS CI
 çıktısı imzasız `.app` arşividir; iPhone'a kurulabilir imzalı IPA değildir.
 
 | Platform | Bu ortamda eksik erişim/araç | Sıradaki komut |
 |---|---|---|
-| Windows 11 | Windows ve Visual Studio 2022 C++ iş yükü/MSVC | `flutter build windows --release`, sonra `flutter run --release -d windows` |
-| macOS | Mac, Xcode ve CocoaPods | `./tool/build_apple.sh && flutter build macos --release`, sonra `flutter run --release -d macos` |
+| Windows 11 | Etkileşimli Windows 11 cihazı yok; CI yalnızca derledi | ZIP’i açıp `itiraz_botu.exe` çalıştır; kaynakla geliştirmek için VS 2022 C++ ve `flutter run --release -d windows` |
+| macOS | Etkileşimli Mac oturumu yok; CI yalnızca derledi | macOS ZIP’ini açıp `.app` çalıştır; kaynakla: `./tool/build_apple.sh && flutter run --release -d macos` |
 | Android | USB cihaz; donanım emülasyonu için `/dev/kvm` de yok | `adb install dist/itiraz-botu-android-arm64.apk`, sonra uçak modunda uygulamayı aç |
-| iPhone | Mac, Xcode, Apple imzalama ekibi ve gerçek iPhone | `./tool/build_apple.sh`, sonra `flutter run --release -d <iphone-kimliği>` |
+| iPhone | Gerçek iPhone ve kullanıcıya ait Apple imzalama ekibi yok; Xcode CI’da imzasız derledi | `./tool/build_apple.sh`, sonra `flutter run --release -d <iphone-kimliği>` |
 
 Windows 11 kurulum/çalıştırma komutları ve iPhone'a özel imzalama, gerçek cihaz,
 IPA oluşturma ve model aktarım adımları [README](../README.md) içindedir.
+
+Android ARM64 yerel kütüphanesinin ELF yükleme bölümlerinde 16 KB (`0x4000`) hizalama doğrulandı.
+APK içeriğinde yerel köprü, Inter ve llama.cpp lisansı bulundu; model parçaları bulunmadı.
+iOS destek dizini sistem yedeklemesinden çıkarılır; bu tercihin gerçek cihazdaki yedekleme testi yapılmadı.

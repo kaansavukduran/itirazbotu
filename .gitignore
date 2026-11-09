@@ -54,3 +54,6 @@ assets/bundled_model/manifest.json
 native/apple/itiraz_native.xcframework/
 *.gguf
 dist/
+
+# Yerel Python test ortamı
+.venv/

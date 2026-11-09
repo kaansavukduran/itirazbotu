@@ -126,8 +126,11 @@ Redistributable (x64) kurulmalıdır; bunu da önceden indirip çevrimdışı ku
 
 ## Linux
 
+Hazır x64 arşivi glibc 2.38 ve üstünü gerektirir (ör. Ubuntu 24.04 veya Debian 13).
+Daha eski dağıtımlarda aşağıdaki komutlarla cihazınızda derleyin.
+
 ```bash
-sudo apt install git clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-dev libgles2
+sudo apt install git clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev g++ libgles2
 git clone --recurse-submodules https://github.com/kaansavukduran/itirazbotu.git
 cd itirazbotu
 flutter pub get
@@ -173,6 +176,8 @@ makinenizde, sağ tık → Aç ile çalışır.
 ---
 
 ## Android
+
+Cihaz: Android 7.0 (API 24) veya üstü ve 64 bit ARM/x86 işlemci.
 
 Gerekenler: Android Studio (SDK Manager'dan **Android SDK Platform 36**, **NDK** (Flutter'ın
 istediği sürüm, `flutter doctor -v` gösterir) ve **CMake 3.22.1**), JDK 17.
@@ -264,6 +269,10 @@ parametreli Q4 modeller önerilir; daha büyükleri bellek denetimine takılır.
 ```bash
 flutter analyze
 flutter test                   # kural motoru, model deposu, arayüz akışı
+# Yerel köprü testi için bir kez: Python 3.10+ ve ayrı geliştirme ortamı
+python3 -m venv .venv
+source .venv/bin/activate
+pip install ./third_party/llama.cpp/gguf-py
 ./tool/test_native.sh          # Linux: llama.cpp köprüsünü derler, test modeli üretir,
                                # gerçek yükleme/üretim/iptal testlerini çalıştırır
 ```
@@ -366,15 +375,16 @@ Her platformda şu dört kontrolü ayrı ayrı yapın. **Bir platformun derlenme
 Güncel ve adım adım kanıtlar: [9 Kasım 2026 doğrulama raporu](docs/DOGRULAMA.md).
 Derleme ile cihazdaki çevrimdışı çalıştırma ayrı tutulur. `.github/workflows/build.yml`
 Linux, Windows, Android, macOS ve imzasız iOS derleme yollarını PR'larda ve elle
-çalıştırılabilir hâle getirir; iş akışının varlığı başarılı derleme kanıtı değildir.
+çalıştırılabilir hâle getirir; [doğrulanan CI çalışmasında](https://github.com/kaansavukduran/itirazbotu/actions/runs/42603505371)
+beş hedefin derlemeleri tamamlandı. Bu sonuç cihazda çevrimdışı çalışma kanıtı değildir.
 
 | Platform | Derlendi | Cihazda çalıştırıldı | Çevrimdışı ilk açılış doğrulandı | Yerel model doğrulandı |
 |---|---|---|---|---|
 | Linux x64 | Evet, release | Evet, Xvfb üzerinde masaüstü uygulaması | Evet, temiz veri dizini ve yalnızca `lo` içeren ağ alanı | Evet, gerçek Qwen GGUF; **Türkçe kalite sınırlı** |
 | Android ARM64 / x64 | Evet, APK | Hayır, cihaz/emülatör yok | Hayır | Hayır; NDK köprüsü derlendi, cihazda üretim denenmedi |
-| Windows 11 | Bu ortamda hayır, MSVC/Windows yok | Hayır | Hayır | Hayır |
-| macOS | Bu ortamda hayır, macOS/Xcode yok | Hayır | Hayır | Hayır |
-| iPhone | Bu ortamda hayır, macOS/Xcode ve imzalama yok | Hayır | Hayır | Hayır |
+| Windows 11 / x64 | Evet, Windows CI | Hayır | Hayır | Hayır |
+| macOS | Evet, Apple CI | Hayır | Hayır | Hayır |
+| iPhone | Evet, imzasız iOS `.app` | Hayır | Hayır | Hayır |
 
 Eksik araçlar ve her platformda sıradaki komut [raporda](docs/DOGRULAMA.md#diğer-platformlar).
 
